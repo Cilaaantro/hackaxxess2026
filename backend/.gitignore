@@ -3,3 +3,4 @@
 speech.mp3
 audio/
 serviceAccountKey.json
+__pycache__/
