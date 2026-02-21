@@ -1,3 +1,5 @@
 .venv
+.env
+speech.mp3
 audio/
 serviceAccountKey.json
