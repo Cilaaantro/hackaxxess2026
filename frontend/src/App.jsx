@@ -23,7 +23,7 @@ function Home() {
           count is {count}
         </button>
         <p>
-          <Link to="/upload">Upload audio</Link>
+          <Link to="/upload">Speak &amp; play back</Link>
         </p>
       </div>
       <p className="read-the-docs">

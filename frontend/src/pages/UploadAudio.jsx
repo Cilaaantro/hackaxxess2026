@@ -1,96 +1,181 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import './UploadAudio.css'
 
-export default function UploadAudio() {
-  const [file, setFile] = useState(null)
-  const [status, setStatus] = useState('idle') // idle | uploading | success | error
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
+const SpeechRecognitionAPI =
+  typeof window !== 'undefined' &&
+  (window.SpeechRecognition || window.webkitSpeechRecognition)
 
-  const handleFileChange = (e) => {
-    const selected = e.target.files?.[0]
-    if (selected) {
-      if (!selected.name.toLowerCase().endsWith('.mp3')) {
-        setError('Please select an MP3 file')
-        setFile(null)
-        return
+export default function UploadAudio() {
+  const [recording, setRecording] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState('idle') // idle | submitting | success | error
+  const [error, setError] = useState(null)
+  const [transcript, setTranscript] = useState('')
+  const [interimTranscript, setInterimTranscript] = useState('')
+  const recognitionRef = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort()
       }
-      setError(null)
-      setFile(selected)
-      setStatus('idle')
-      setResult(null)
+    }
+  }, [])
+
+  const startRecording = async () => {
+    setError(null)
+    setTranscript('')
+    setInterimTranscript('')
+    setSubmitStatus('idle')
+    if (!SpeechRecognitionAPI) {
+      setError('Speech recognition is not supported in this browser.')
+      return
+    }
+    try {
+      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      const recognition = new Recognition()
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.lang = 'en-US'
+      recognition.onresult = (event) => {
+        let final = ''
+        let interim = ''
+        const results = event.results
+        if (!results || !results.length) return
+        for (let i = event.resultIndex; i < results.length; i++) {
+          const result = results[i]
+          const first = result[0] ?? (typeof result.item === 'function' ? result.item(0) : null)
+          const chunk = (first && first.transcript) ? String(first.transcript).trim() : ''
+          const isFinal = typeof result.isFinal === 'boolean' ? result.isFinal : Boolean(chunk)
+          if (!chunk) continue
+          if (isFinal) {
+            final += (final ? ' ' : '') + chunk
+          } else {
+            interim += (interim ? ' ' : '') + chunk
+          }
+        }
+        if (final) {
+          setTranscript((prev) => (prev ? `${prev} ${final}` : final))
+        }
+        setInterimTranscript(interim)
+      }
+      recognition.onerror = (event) => {
+        setInterimTranscript('')
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setError('Microphone or speech recognition was denied.')
+        } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          setError(`Speech recognition error: ${event.error}`)
+        }
+      }
+      recognition.start()
+      recognitionRef.current = recognition
+      setRecording(true)
+    } catch {
+      setError('Could not start speech recognition.')
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!file) return
-    setStatus('uploading')
+  const stopRecording = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+      recognitionRef.current = null
+    }
+    setRecording(false)
+    setInterimTranscript('')
+  }
+
+  const submitTranscript = async () => {
+    const text = transcript.trim()
+    if (!text) return
+    setSubmitStatus('submitting')
     setError(null)
-    setResult(null)
-    const formData = new FormData()
-    formData.append('audio', file)
     try {
-      const res = await fetch('/api/upload/audio', {
+      const res = await fetch('/api/transcript', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: text }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.detail || 'Upload failed')
-        setStatus('error')
+        setError(data.detail ?? 'Failed to send transcript')
+        setSubmitStatus('error')
         return
       }
-      setResult(data)
-      setStatus('success')
+      setSubmitStatus('success')
     } catch (err) {
-      setError(err.message || 'Upload failed')
-      setStatus('error')
+      setError(err.message ?? 'Failed to send transcript')
+      setSubmitStatus('error')
     }
   }
+
+  const hasTranscript = transcript.trim().length > 0
 
   return (
     <div className="upload-audio">
       <nav className="upload-audio-nav">
         <Link to="/">← Home</Link>
       </nav>
-      <h1>Upload Audio</h1>
-      <p className="upload-audio-hint">Select an MP3 file to upload to the server.</p>
-      <form onSubmit={handleSubmit} className="upload-audio-form">
-        <label className="upload-audio-label">
-          <span className="upload-audio-label-text">Choose MP3 file</span>
-          <input
-            type="file"
-            accept=".mp3,audio/mpeg"
-            onChange={handleFileChange}
-            className="upload-audio-input"
-          />
-        </label>
-        {file && (
-          <p className="upload-audio-filename">Selected: {file.name}</p>
+      <h1>Speak &amp; Send Transcript</h1>
+      <p className="upload-audio-hint">
+        Press record, speak, then stop. Submit to send the transcript to the server.
+      </p>
+      {!SpeechRecognitionAPI && (
+        <p className="upload-audio-unsupported">
+          Speech recognition is not supported in this browser. Try Chrome or Edge.
+        </p>
+      )}
+      <div className="upload-audio-form">
+        <div className="upload-audio-record-row">
+          {!recording ? (
+            <button
+              type="button"
+              onClick={startRecording}
+              className="upload-audio-record upload-audio-record-start"
+              disabled={submitStatus === 'submitting'}
+            >
+              Record
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={stopRecording}
+              className="upload-audio-record upload-audio-record-stop"
+            >
+              Stop
+            </button>
+          )}
+        </div>
+        {(transcript || interimTranscript || recording) && (
+          <div className="upload-audio-transcript" aria-live="polite">
+            <span className="upload-audio-transcript-label">Live transcript:</span>
+            <p className="upload-audio-transcript-text">
+              {transcript}
+              {interimTranscript && (
+                <span className="upload-audio-transcript-interim">{interimTranscript}</span>
+              )}
+              {recording && !transcript && !interimTranscript && (
+                <span className="upload-audio-transcript-placeholder">Listening…</span>
+              )}
+            </p>
+          </div>
+        )}
+        {hasTranscript && !recording && (
+          <button
+            type="button"
+            onClick={submitTranscript}
+            disabled={submitStatus === 'submitting'}
+            className="upload-audio-submit"
+          >
+            {submitStatus === 'submitting' ? 'Sending…' : 'Submit transcript'}
+          </button>
+        )}
+        {submitStatus === 'success' && (
+          <p className="upload-audio-success">Transcript sent to the server.</p>
         )}
         {error && (
           <p className="upload-audio-error" role="alert">{error}</p>
         )}
-        <button
-          type="submit"
-          disabled={!file || status === 'uploading'}
-          className="upload-audio-submit"
-        >
-          {status === 'uploading' ? 'Uploading…' : 'Upload'}
-        </button>
-      </form>
-      {status === 'success' && result && (
-        <div className="upload-audio-result">
-          <h2>Upload complete</h2>
-          <ul>
-            <li>Filename: {result.filename}</li>
-            <li>Size: {result.size_bytes} bytes</li>
-            <li>Saved to: {result.saved_to}</li>
-          </ul>
-        </div>
-      )}
+      </div>
     </div>
   )
 }

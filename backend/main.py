@@ -1,10 +1,11 @@
 from fastapi import FastAPI
-
-from routers import audio
+from pydantic import BaseModel
 
 app = FastAPI(title="Hack Axxess 2026 API")
 
-app.include_router(audio.router)
+
+class TranscriptBody(BaseModel):
+    transcript: str
 
 
 @app.get("/")
@@ -15,3 +16,8 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/transcript")
+def submit_transcript(body: TranscriptBody):
+    return {"received": True, "transcript": body.transcript}
