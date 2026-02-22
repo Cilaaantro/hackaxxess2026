@@ -44,6 +44,13 @@ db = firestore.client()
 app = FastAPI(title="Hack Axxess 2026 API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Vercel serverless handler (Mangum wraps FastAPI for AWS Lambda / Vercel)
+try:
+    from mangum import Mangum
+    handler = Mangum(app)
+except ImportError:
+    handler = None  # Running locally without mangum installed is fine
+
 
 class TranscriptBody(BaseModel):
     transcript: str

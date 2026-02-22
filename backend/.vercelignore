@@ -1,0 +1,22 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+
+# Sensitive credentials (set these as Vercel env vars instead)
+.env
+serviceAccountKey.json
+
+# Local runtime files
+medication_reminder_subscribers.json
+medication_reminder_sent.json
+
+# Dev/test scripts
+run_pipeline.py
+
+# Jupyter / misc
+*.ipynb
+*.log

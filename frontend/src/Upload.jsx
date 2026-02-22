@@ -46,7 +46,7 @@ export default function Upload() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("http://127.0.0.1:8000/analyze-full", {
+      const res = await fetch("/api/analyze-full", {
         method: "POST",
         body: formData,
       });
