@@ -1,0 +1,18 @@
+# Ignore Python cache directories
+__pycache__/
+backend/__pycache__/
+backend/routers/__pycache__/
+
+# Ignore other Python cache files
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore virtual environments
+venv/
+
+# Ignore environment files
+.env
+
+# Ignore service account keys
+backend/serviceAccountKey.json
