@@ -18,6 +18,9 @@ Options:
     --diet          Dietary restrictions e.g. "vegetarian, no gluten"
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 import json
 import os
@@ -25,6 +28,7 @@ import sys
 
 from extract_bloodwork import extract_bloodwork
 from bloodwork_advisor import analyze_bloodwork
+
 
 
 def parse_args():

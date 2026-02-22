@@ -1,2 +1,4 @@
 .venv
 sample_bloodwork.pdf
+.env
+__pycache__

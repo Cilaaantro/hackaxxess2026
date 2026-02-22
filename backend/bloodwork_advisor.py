@@ -2,7 +2,6 @@ import json
 import requests
 from typing import Optional
 
-# ── Configuration ────────────────────────────────────────────────────────────
 
 FEATHERLESS_API_URL = "https://api.featherless.ai/v1/chat/completions"
 DEFAULT_MODEL = "deepseek-ai/DeepSeek-R1-0528"   # swap to any model on Featherless
