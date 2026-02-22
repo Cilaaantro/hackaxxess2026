@@ -901,6 +901,93 @@ input:focus, textarea:focus {
 }
 
 /* ── Doctor email status card ─────────────────────────────────────────────── */
+/* ── Doctor selector (Symptoms page) ────────────────────────────────────── */
+.doctor-toggle-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.875rem;
+}
+.doctor-toggle-btn {
+  padding: 0.4rem 1rem;
+  border-radius: var(--warm-radius-pill);
+  font-size: 0.83rem;
+  font-weight: 500;
+  background: var(--warm-bg);
+  color: var(--warm-text-muted);
+  border: 1.5px solid var(--warm-border);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.doctor-toggle-btn.active {
+  background: var(--warm-primary);
+  color: #fff;
+  border-color: var(--warm-primary);
+}
+.doctor-toggle-btn:hover:not(.active) {
+  background: var(--warm-primary-light);
+  color: var(--warm-accent);
+  border-color: var(--warm-accent);
+}
+
+.doctor-select-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.doctor-select-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border: 1.5px solid var(--warm-border);
+  border-radius: var(--warm-radius);
+  background: var(--warm-bg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.doctor-select-card input[type="radio"] { display: none; }
+.doctor-select-card.selected {
+  border-color: var(--warm-primary);
+  background: var(--warm-primary-light);
+}
+.doctor-select-card:hover:not(.selected) {
+  border-color: var(--warm-accent);
+}
+.doctor-select-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+.doctor-select-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--warm-text);
+}
+.doctor-select-email {
+  font-size: 0.78rem;
+  color: var(--warm-text-muted);
+}
+.doctor-select-specialty {
+  font-size: 0.73rem;
+  color: var(--warm-text-subtle);
+  font-style: italic;
+}
+.doctor-select-check {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--warm-primary);
+}
+.doctor-select-hint {
+  font-size: 0.78rem;
+  color: var(--warm-text-subtle);
+  margin: 0.25rem 0 0;
+}
+
 .doctor-email-status {
   transition: border-color var(--warm-transition), background var(--warm-transition);
 }

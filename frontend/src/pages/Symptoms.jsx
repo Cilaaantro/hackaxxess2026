@@ -8,12 +8,48 @@ export default function Symptoms() {
   const [selected, setSelected] = useState(new Set());
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
-  const [doctorEmail, setDoctorEmail] = useState("");
+
+  // Physician from background info (users/{uid}.doctor)
+  const [physician, setPhysician] = useState(null);   // { name, email, specialty } | null
+  const [doctorLoading, setDoctorLoading] = useState(true);
+  const [useCustom, setUseCustom] = useState(false);
+  const [customEmail, setCustomEmail] = useState("");
+
   const [submitted, setSubmitted] = useState(null);
   const [prediction, setPrediction] = useState(null);
   const [predicting, setPredicting] = useState(false);
   const [predError, setPredError] = useState(null);
   const containerRef = useRef(null);
+
+  // Fetch physician saved via /save-doctor-info (users/{uid}.doctor)
+  useEffect(() => {
+    if (!user) { setDoctorLoading(false); setUseCustom(true); return; }
+    const load = async () => {
+      try {
+        const token = await user.getIdToken(/* forceRefresh */ true);
+        const res = await fetch("/api/get-doctor-info", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (res.ok && data.doctor?.email) {
+          setPhysician(data.doctor);
+          setUseCustom(false);
+        } else {
+          console.warn("No physician found in Firestore:", data);
+          setUseCustom(true);
+        }
+      } catch (e) {
+        console.warn("Could not load physician info:", e);
+        setUseCustom(true);
+      } finally {
+        setDoctorLoading(false);
+      }
+    };
+    load();
+  }, [user?.uid]);
+
+  // The actual email sent to the backend
+  const doctorEmail = useCustom ? customEmail : (physician?.email || "");
 
   const available = SYMPTOM_KEYS_ORDER.filter(
     (key) =>
@@ -169,24 +205,71 @@ export default function Symptoms() {
             </div>
           </div>
 
-          {/* Doctor email */}
+          {/* Doctor notification */}
           <div className="card" style={{ marginTop: "0.25rem" }}>
             <h3>📧 Notify your doctor</h3>
             <p style={{ marginBottom: "0.875rem" }}>
-              Enter your doctor's email and we'll send them a full symptom report along
-              with the AI-recommended OTC steps provided to you.
+              We'll send your physician a full symptom report along with AI-recommended OTC steps.
             </p>
-            <div className="form-row" style={{ marginBottom: 0 }}>
-              <label htmlFor="doctor-email">Doctor's email address <span style={{ color: "var(--warm-text-subtle)", fontWeight: 400 }}>(optional)</span></label>
-              <input
-                id="doctor-email"
-                type="email"
-                value={doctorEmail}
-                onChange={(e) => setDoctorEmail(e.target.value)}
-                placeholder="doctor@clinic.com"
-                style={{ maxWidth: "100%" }}
-              />
-            </div>
+
+            {doctorLoading ? (
+              <p className="doctor-select-hint">Loading physician info…</p>
+            ) : physician && !useCustom ? (
+              <>
+                <div className="doctor-select-card selected" style={{ cursor: "default" }}>
+                  <div className="doctor-select-info">
+                    <span className="doctor-select-name">{physician.name}</span>
+                    <span className="doctor-select-email">{physician.email}</span>
+                    {physician.specialty && (
+                      <span className="doctor-select-specialty">{physician.specialty}</span>
+                    )}
+                  </div>
+                  <span className="doctor-select-check">✓</span>
+                </div>
+                <button
+                  type="button"
+                  className="doctor-toggle-btn"
+                  style={{ marginTop: "0.6rem" }}
+                  onClick={() => setUseCustom(true)}
+                >
+                  Use a different email instead
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="form-row" style={{ marginBottom: 0 }}>
+                  <label htmlFor="doctor-email">
+                    Doctor's email{" "}
+                    <span style={{ color: "var(--warm-text-subtle)", fontWeight: 400 }}>(optional)</span>
+                  </label>
+                  <input
+                    id="doctor-email"
+                    type="email"
+                    value={customEmail}
+                    onChange={(e) => setCustomEmail(e.target.value)}
+                    placeholder="doctor@clinic.com"
+                    style={{ maxWidth: "100%" }}
+                  />
+                </div>
+                {physician && (
+                  <button
+                    type="button"
+                    className="doctor-toggle-btn"
+                    style={{ marginTop: "0.6rem" }}
+                    onClick={() => { setUseCustom(false); setCustomEmail(""); }}
+                  >
+                    ← Use {physician.name} ({physician.email})
+                  </button>
+                )}
+                {!physician && (
+                  <p className="doctor-select-hint" style={{ marginTop: "0.5rem" }}>
+                    Add your physician in{" "}
+                    <a href="/background-info" style={{ color: "var(--warm-accent)" }}>Background Info</a>{" "}
+                    to auto-fill this field.
+                  </p>
+                )}
+              </>
+            )}
           </div>
 
           {/* Actions */}
@@ -270,7 +353,9 @@ export default function Symptoms() {
                           Doctor notified
                         </p>
                         <p style={{ margin: "0.2rem 0 0", fontSize: "0.8125rem", color: "var(--warm-text-muted)" }}>
-                          A full symptom report and your OTC recommendations were sent to <strong>{doctorEmail}</strong>.
+                          {physician && !useCustom
+                            ? <>A full symptom report was sent to <strong>{physician.name}</strong> ({physician.email}).</>
+                            : <>A full symptom report was sent to <strong>{doctorEmail}</strong>.</>}
                         </p>
                       </>
                     ) : (

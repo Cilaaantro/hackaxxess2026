@@ -81,12 +81,19 @@ Tone rules for Phase 2:
 
 
 def _build_user_context_block(user_context: dict) -> str:
-    """Format biomarkers and backgroundInfo into a readable context string for the system prompt."""
+    """Format biomarkers, symptoms, and backgroundInfo into a context string for the system prompt."""
     if not user_context:
         return ""
 
     lines = ["\n\n━━━ PATIENT CONTEXT (use this to personalise every response) ━━━"]
 
+    # Active symptoms (from most recent symptom submission)
+    symptoms = user_context.get("symptoms")
+    if symptoms and isinstance(symptoms, list) and len(symptoms) > 0:
+        readable = [s.replace("_", " ").title() for s in symptoms]
+        lines.append(f"\nCurrently reported symptoms: {', '.join(readable)}")
+
+    # Lab biomarkers
     biomarkers = user_context.get("biomarkers")
     if biomarkers:
         lines.append("\nLab biomarkers (most recent upload):")
@@ -94,6 +101,7 @@ def _build_user_context_block(user_context: dict) -> str:
             label = key.replace("_", " ").title()
             lines.append(f"  • {label}: {val}")
 
+    # Background / medical history
     bg = user_context.get("backgroundInfo")
     if bg:
         diseases = bg.get("diseases") or {}

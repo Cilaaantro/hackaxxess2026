@@ -25,8 +25,10 @@ function ChatWidget() {
           getDoc(doc(firestore, "users", user.uid)),
           getDoc(doc(firestore, "users", user.uid, "backgroundInfo", "info")),
         ]);
+        const userData = userSnap.exists() ? userSnap.data() : {};
         setUserContext({
-          biomarkers: userSnap.exists() ? (userSnap.data().biomarkers || null) : null,
+          biomarkers: userData.biomarkers || null,
+          symptoms: userData.symptoms || null,
           backgroundInfo: bgSnap.exists() ? bgSnap.data() : null,
         });
       } catch (e) {

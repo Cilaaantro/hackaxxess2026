@@ -612,9 +612,11 @@ def predict_and_recommend(body: PredictRecommendBody):
     doctor_email = (body.doctor_email or "").strip()
     email_sent = False
     email_error = None
+    print(f"[predict-and-recommend] doctor_email received: '{doctor_email}'")
     if doctor_email:
         try:
             resend_key = (os.getenv("RESEND_API_KEY") or "").strip().strip('"').strip("'")
+            print(f"[predict-and-recommend] RESEND_API_KEY present: {bool(resend_key)}")
             from_email = os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
             patient_name = body.patient_name or "the patient"
             selected_symptoms = [k for k, v in body.symptoms.items() if v == 1]
@@ -659,7 +661,11 @@ def predict_and_recommend(body: PredictRecommendBody):
             email_sent = True
         except Exception as exc:
             email_error = str(exc)
+            print(f"[predict-and-recommend] Email failed: {exc}")
+    else:
+        print("[predict-and-recommend] Skipping email — doctor_email is empty")
 
+    print(f"[predict-and-recommend] email_sent={email_sent}, email_error={email_error}")
     return {
         "disease": disease,
         "recommendation": recommendation,
