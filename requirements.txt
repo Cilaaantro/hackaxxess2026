@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+mangum
+pydantic
+requests
+python-dotenv
+firebase-admin
+python-multipart
+apscheduler
+pytz
+pdfplumber
+tensorflow
+scikit-learn
+numpy
+pillow
