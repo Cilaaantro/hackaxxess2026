@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link } from 'react-router-dom'
 import { auth, firestore } from '../firebase'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import './Chat.css'
@@ -20,11 +19,9 @@ export default function Chat() {
   const messagesEndRef = useRef(null)
   const audioRef = useRef(null)
 
-  // Scroll to bottom whenever messages change
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   useEffect(() => { scrollToBottom() }, [messages])
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (recognitionRef.current) recognitionRef.current.abort()
@@ -32,7 +29,6 @@ export default function Chat() {
     }
   }, [])
 
-  // --- Voice Recording ---
   const startRecording = () => {
     if (!SpeechRecognitionAPI) {
       setError('Speech recognition is not supported. Try Chrome or Edge.')
@@ -52,7 +48,7 @@ export default function Chat() {
       for (let i = event.resultIndex; i < results.length; i++) {
         const result = results[i]
         const first = result[0] ?? (typeof result.item === 'function' ? result.item(0) : null)
-        const chunk = (first?.transcript) ? String(first.transcript).trim() : ''
+        const chunk = first?.transcript ? String(first.transcript).trim() : ''
         const isFinal = typeof result.isFinal === 'boolean' ? result.isFinal : Boolean(chunk)
         if (!chunk) continue
         if (isFinal) final += (final ? ' ' : '') + chunk
@@ -79,7 +75,6 @@ export default function Chat() {
     setInterimTranscript('')
   }
 
-  // --- Send Message & Save to Firestore ---
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || loading) return
@@ -98,11 +93,9 @@ export default function Chat() {
     }
 
     try {
-      // Save user message
       const chatRef = collection(firestore, 'users', user.uid, 'chats')
       await addDoc(chatRef, { ...userMsg, timestamp: serverTimestamp() })
 
-      // Send to backend
       const chatMessages = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }))
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -114,8 +107,6 @@ export default function Chat() {
 
       const assistantMsg = { role: 'assistant', content: data.message }
       setMessages((prev) => [...prev, assistantMsg])
-
-      // Save assistant response
       await addDoc(chatRef, { ...assistantMsg, timestamp: serverTimestamp() })
     } catch (err) {
       console.error(err)
@@ -126,7 +117,6 @@ export default function Chat() {
     }
   }
 
-  // --- Text-to-Speech ---
   const playTTS = async (content, id) => {
     if (!content?.trim() || playingId !== null) return
     setPlayingId(id)
@@ -142,14 +132,8 @@ export default function Chat() {
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       audioRef.current = { src: url }
-      audio.onended = () => {
-        setPlayingId(null)
-        URL.revokeObjectURL(url)
-      }
-      audio.onerror = () => {
-        setPlayingId(null)
-        URL.revokeObjectURL(url)
-      }
+      audio.onended = () => { setPlayingId(null); URL.revokeObjectURL(url) }
+      audio.onerror = () => { setPlayingId(null); URL.revokeObjectURL(url) }
       await audio.play()
     } catch {
       setPlayingId(null)
@@ -158,72 +142,93 @@ export default function Chat() {
   }
 
   return (
-    <div className="chat-page">
-      <nav className="chat-nav">
-        <Link to="/">← Home</Link>
-      </nav>
-      <h1>Chat</h1>
-
-      <div className="chat-messages" role="log" aria-live="polite">
-        {messages.length === 0 && (
-          <p className="chat-placeholder">Send a message or use the mic to speak.</p>
-        )}
-        {messages.map((m, i) => (
-          <div key={i} className={`chat-msg chat-msg--${m.role}`}>
-            <span className="chat-msg-role">{m.role === 'user' ? 'You' : 'Assistant'}</span>
-            <p className="chat-msg-content">{m.content}</p>
-            {m.role === 'assistant' && (
-              <button
-                type="button"
-                className="chat-msg-tts"
-                onClick={() => playTTS(m.content, i)}
-                disabled={playingId !== null && playingId !== i}
-                title="Play message with TTS"
-                aria-label="Play message"
-              >
-                {playingId === i ? '⏸' : '🔊'}
-              </button>
-            )}
-          </div>
-        ))}
-        {loading && (
-          <div className="chat-msg chat-msg--assistant">
-            <span className="chat-msg-role">Assistant</span>
-            <p className="chat-msg-content chat-msg-loading">Thinking…</p>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+    <div className="chat-shell">
+      {/* Page banner */}
+      <div className="chat-banner">
+        <div className="chat-banner-inner">
+          <div className="section-label">AI health assistant</div>
+          <h1 className="chat-banner-title">
+            Ask <span className="accent">anything</span> about your health
+          </h1>
+          <p className="chat-banner-body">
+            Your personal assistant is here to help interpret your results, answer questions, and guide your next steps.
+          </p>
+        </div>
       </div>
 
-      {error && <p className="chat-error" role="alert">{error}</p>}
+      {/* Chat area */}
+      <div className="page-body" style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingTop: '1.75rem' }}>
+        <div className="chat-window">
+          <div className="chat-messages" role="log" aria-live="polite">
+            {messages.length === 0 && (
+              <div className="chat-empty">
+                <div className="chat-empty-icon">💬</div>
+                <p className="chat-empty-title">Start the conversation</p>
+                <p className="chat-empty-hint">Ask about your lab results, symptoms, or general health questions.</p>
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} className={`chat-msg chat-msg--${m.role}`}>
+                <span className="chat-msg-role">{m.role === 'user' ? 'You' : 'Assistant'}</span>
+                <p className="chat-msg-content">{m.content}</p>
+                {m.role === 'assistant' && (
+                  <button
+                    type="button"
+                    className="chat-msg-tts"
+                    onClick={() => playTTS(m.content, i)}
+                    disabled={playingId !== null && playingId !== i}
+                    title="Play with voice"
+                    aria-label="Play message"
+                  >
+                    {playingId === i ? '⏸ Playing…' : '🔊 Listen'}
+                  </button>
+                )}
+              </div>
+            ))}
+            {loading && (
+              <div className="chat-msg chat-msg--assistant">
+                <span className="chat-msg-role">Assistant</span>
+                <p className="chat-msg-content chat-msg-loading">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </p>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-      <div className="chat-input-wrap">
-        <input
-          type="text"
-          className="chat-input"
-          placeholder={recording ? 'Speaking…' : 'Type or use mic'}
-          value={recording ? input + (interimTranscript ? ` ${interimTranscript}` : '') : input}
-          onChange={(e) => !recording && setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-          disabled={loading}
-        />
-        <button
-          type="button"
-          className="chat-mic"
-          onClick={recording ? stopRecording : startRecording}
-          title={recording ? 'Stop speaking' : 'Speak to type'}
-          aria-label={recording ? 'Stop' : 'Start voice input'}
-        >
-          {recording ? '⏹' : '🎤'}
-        </button>
-        <button
-          type="button"
-          className="chat-send"
-          onClick={sendMessage}
-          disabled={loading || !input.trim()}
-        >
-          Send
-        </button>
+          {error && <p className="chat-error" role="alert">{error}</p>}
+
+          <div className="chat-input-wrap">
+            <input
+              type="text"
+              className="chat-input"
+              placeholder={recording ? 'Listening…' : 'Type a message or use the mic…'}
+              value={recording ? input + (interimTranscript ? ` ${interimTranscript}` : '') : input}
+              onChange={(e) => !recording && setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+              disabled={loading}
+            />
+            <button
+              type="button"
+              className={`chat-mic${recording ? ' recording' : ''}`}
+              onClick={recording ? stopRecording : startRecording}
+              title={recording ? 'Stop' : 'Speak to type'}
+              aria-label={recording ? 'Stop recording' : 'Start voice input'}
+            >
+              {recording ? '⏹' : '🎤'}
+            </button>
+            <button
+              type="button"
+              className="chat-send"
+              onClick={sendMessage}
+              disabled={loading || !input.trim()}
+            >
+              Send
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

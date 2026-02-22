@@ -32,5 +32,18 @@ export default function Login({ setUser }) {
     }
   };
 
-  return <button onClick={login}>Login with Google</button>;
+  return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <div className="login-logo">
+          Health <em>Bridge</em>
+        </div>
+        <p className="login-tagline">Your health, understood</p>
+        <p>Sign in to manage your health data and get personalised insights.</p>
+        <button type="button" onClick={login}>
+          Sign in with Google
+        </button>
+      </div>
+    </div>
+  );
 }

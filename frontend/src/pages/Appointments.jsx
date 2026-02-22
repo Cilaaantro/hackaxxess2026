@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 
 const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
 
@@ -112,112 +111,101 @@ export default function Appointments() {
     : [];
 
   return (
-    <div style={{ maxWidth: 480 }}>
-      <nav style={{ marginBottom: 16 }}>
-        <Link to="/">← Home</Link>
-      </nav>
-      <h2>Book an appointment</h2>
-      <p style={{ color: "#666", marginBottom: 16 }}>
-        Available times respect your Cal.com schedule (e.g. Mon–Fri 9–5). Pick a slot, then enter your details.
-      </p>
+    <div className="page-body">
+      <div className="page-title-group">
+        <h1 className="page-title">Book an appointment</h1>
+        <p className="page-subtitle">
+          Pick an available slot (Mon–Fri, 9am–5pm), then confirm your details.
+        </p>
+      </div>
 
-      {loadingSlots && <p style={{ color: "#666" }}>Loading available times…</p>}
+      {loadingSlots && (
+        <p className="status-info">Loading available times…</p>
+      )}
       {slotsError && (
-        <p style={{ color: "crimson", marginBottom: 16 }}>{slotsError}</p>
+        <p className="status-err" style={{ marginBottom: "1rem" }}>{slotsError}</p>
       )}
 
       {!loadingSlots && slotsByDate && dateKeys.length > 0 && (
-        <>
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Date</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        <div className="card card-accent" style={{ marginBottom: "1.25rem" }}>
+          <div className="form-row" style={{ marginBottom: "1.25rem" }}>
+            <label>Select a date</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.35rem" }}>
               {dateKeys.map((d) => (
                 <button
                   key={d}
                   type="button"
+                  className={`slot-btn${selectedDate === d ? " selected" : ""}`}
                   onClick={() => { setSelectedDate(d); setSelectedSlot(null); }}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 6,
-                    border: selectedDate === d ? "2px solid #333" : "1px solid #ccc",
-                    background: selectedDate === d ? "#f0f0f0" : "#fff",
-                    cursor: "pointer",
-                  }}
                 >
                   {formatDateKey(d)}
                 </button>
               ))}
             </div>
           </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>Time</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {Array.isArray(slotsForSelected) && slotsForSelected.map((slot) => {
-                const start = typeof slot === "string" ? slot : slot?.start;
-                if (!start) return null;
-                const isSelected = selectedSlot?.start === start;
-                return (
-                  <button
-                    key={start}
-                    type="button"
-                    onClick={() => setSelectedSlot(typeof slot === "object" ? slot : { start, end: start })}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      border: isSelected ? "2px solid #333" : "1px solid #ccc",
-                      background: isSelected ? "#e0e0e0" : "#fff",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {formatSlotTime(start)}
-                  </button>
-                );
-              })}
+
+          {selectedDate && (
+            <div className="form-row" style={{ marginBottom: 0 }}>
+              <label>Available times</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.35rem" }}>
+                {Array.isArray(slotsForSelected) && slotsForSelected.map((slot) => {
+                  const start = typeof slot === "string" ? slot : slot?.start;
+                  if (!start) return null;
+                  const isSelected = selectedSlot?.start === start;
+                  return (
+                    <button
+                      key={start}
+                      type="button"
+                      className={`slot-btn${isSelected ? " selected" : ""}`}
+                      onClick={() => setSelectedSlot(typeof slot === "object" ? slot : { start, end: start })}
+                    >
+                      {formatSlotTime(start)}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        </>
+          )}
+        </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-            style={{ width: "100%", padding: "8px 10px", boxSizing: "border-box" }}
-          />
-        </div>
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            style={{ width: "100%", padding: "8px 10px", boxSizing: "border-box" }}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={loading || !selectedSlot || loadingSlots}
-          style={{ padding: "8px 16px" }}
-        >
-          {loading ? "Creating…" : "Create appointment"}
-        </button>
-      </form>
-      {status && (
-        <p
-          style={{
-            marginTop: 16,
-            fontSize: 14,
-            color: status.ok ? "green" : "crimson",
-          }}
-        >
-          {status.message}
-        </p>
-      )}
+      <div className="card">
+        <h3>Your details</h3>
+        <form onSubmit={handleSubmit}>
+          <div className="form-row">
+            <label htmlFor="appt-name">Name</label>
+            <input
+              id="appt-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your full name"
+            />
+          </div>
+          <div className="form-row" style={{ marginBottom: "1.5rem" }}>
+            <label htmlFor="appt-email">Email</label>
+            <input
+              id="appt-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading || !selectedSlot || loadingSlots}
+            style={{ borderRadius: "var(--warm-radius-pill)", padding: "0.7rem 1.75rem" }}
+          >
+            {loading ? "Creating…" : "Confirm appointment"}
+          </button>
+        </form>
+        {status && (
+          <p className={status.ok ? "status-ok" : "status-err"}>
+            {status.message}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
