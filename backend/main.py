@@ -32,7 +32,13 @@ from chatbot import chat as chatbot_chat
 from cal_com import create_booking as cal_create_booking, get_available_slots as cal_get_available_slots
 
 import firebase_admin
-from firebase_admin import credentials, auth
+from firebase_admin import credentials, auth, firestore
+
+# Initialize Firebase Admin
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 
 app = FastAPI(title="Hack Axxess 2026 API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -40,6 +46,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 class TranscriptBody(BaseModel):
     transcript: str
+
+class DoctorInfoBody(BaseModel):
+    name: str
+    email: str
+    specialty: str
 
 
 class ChatMessage(BaseModel):
@@ -166,9 +177,28 @@ def _run_medication_reminders() -> None:
         _save_medication_sent_today(sent)
 
 
-# Initialize Firebase Admin
-cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
+@app.post("/save-doctor-info")
+def save_doctor_info(
+    body: DoctorInfoBody,
+    user=Depends(verify_token)
+):
+    uid = user["uid"]
+
+    doc_ref = db.collection("users").document(uid)
+
+    doc_ref.set({
+        "doctor": {
+            "name": body.name,
+            "email": body.email,
+            "specialty": body.specialty
+        },
+        "updatedAt": datetime.utcnow()
+    }, merge=True)
+
+    return {"message": "Doctor information saved successfully"}
+
+
+
 
 # CORS for frontend (Vite default port 5173)
 app.add_middleware(
@@ -397,6 +427,16 @@ def create_appointment(body: CreateAppointmentBody):
             except Exception:
                 pass
         raise HTTPException(status_code=502, detail=f"Cal.com booking failed: {msg}")
+@app.get("/get-doctor-info")
+def get_doctor_info(user=Depends(verify_token)):
+    uid = user["uid"]
+    doc = db.collection("users").document(uid).get()
+
+    if not doc.exists:
+        return {"doctor": None}
+
+    data = doc.to_dict()
+    return {"doctor": data.get("doctor")}
 
 
 @app.post("/send-password-reset-email")
