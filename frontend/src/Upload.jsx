@@ -1,79 +1,93 @@
 // src/pages/Upload.jsx
 import React, { useState } from "react";
-import { auth, firestore } from "./firebase"; // Firestore and auth instances
-import { doc, setDoc } from "firebase/firestore";
+import { auth, firestore } from "./firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
-  const [status, setStatus] = useState(""); // To show upload status
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Handle file selection
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
   };
 
-  // Upload PDF to backend and save JSON to Firestore
   const handleUpload = async () => {
     if (!file) {
-      setStatus("Please select a file.");
+      setStatus("Please select a PDF file.");
       return;
     }
 
-    const user = auth.currentUser; // Get the currently signed-in user
+    const user = auth.currentUser;
     if (!user) {
       setStatus("No logged-in user found.");
       return;
     }
 
-    setStatus("Uploading PDF...");
+    setLoading(true);
+    setStatus("Analyzing bloodwork...");
 
     try {
-      // Send PDF to backend for processing
+      // Step 1: Send PDF to full pipeline
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("http://127.0.0.1:8000/upload-pdf", {
+      const res = await fetch("http://127.0.0.1:8000/analyze-full", {
         method: "POST",
         body: formData,
       });
 
       if (!res.ok) {
-        throw new Error("Failed to upload PDF");
+        const err = await res.json();
+        throw new Error(err.detail || "Analysis failed");
       }
 
       const data = await res.json();
       setResult(data);
 
-      // Save JSON to Firestore under this user
-      await setDoc(doc(firestore, "users", user.uid), {
-        biomarkers: data.biomarkers,
-        pdf_filename: data.filename,
-        timestamp: new Date(),
+      // Step 2: Save analysis as a new report under user
+      await addDoc(collection(firestore, "users", user.uid, "reports"), {
+        extracted_biomarkers: data.extracted_biomarkers,
+        flagged_biomarkers: data.flagged_biomarkers,
+        recommendations: data.recommendations,
+        pdf_filename: file.name,
+        created_at: serverTimestamp(),
       });
 
-      setStatus("Data saved successfully!");
+      setStatus("Analysis complete and saved successfully!");
     } catch (error) {
       console.error(error);
       setStatus("Error: " + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>Upload PDF and Save Biomarkers</h2>
+    <div style={{ padding: "40px" }}>
+      <h2>Upload Bloodwork PDF</h2>
 
-      <input type="file" accept="application/pdf" onChange={handleFileChange} />
-      <button onClick={handleUpload} style={{ marginLeft: "10px" }}>
-        Upload PDF
+      <input
+        type="file"
+        accept="application/pdf"
+        onChange={handleFileChange}
+      />
+
+      <button
+        onClick={handleUpload}
+        disabled={loading}
+        style={{ marginLeft: "10px" }}
+      >
+        {loading ? "Analyzing..." : "Upload & Analyze"}
       </button>
 
-      {status && <p>{status}</p>}
+      {status && <p style={{ marginTop: 10 }}>{status}</p>}
 
       {result && (
-        <div style={{ marginTop: "20px" }}>
-          <h3>Results for {result.filename}</h3>
-          <pre>{JSON.stringify(result.biomarkers, null, 2)}</pre>
+        <div style={{ marginTop: "30px" }}>
+          <h3>Recommendations</h3>
+          <p>{result.recommendations}</p>
         </div>
       )}
     </div>

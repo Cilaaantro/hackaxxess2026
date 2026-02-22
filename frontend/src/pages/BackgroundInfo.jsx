@@ -1,132 +1,129 @@
-import React, { useState, useEffect } from "react";
-import { db, auth } from "../firebase"; // Adjust the path if needed
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { useState, useEffect } from "react";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { firestore, auth } from "../firebase"; // Make sure firebase is set up
 
-const BackgroundInfo = () => {
-  // Setting initial states for diseases
-  const [selfDiseases, setSelfDiseases] = useState({
-    diabetes: false,
-    hypertension: false,
-    asthma: false,
-    cancer: false,
-    stroke: false,
+export default function BackgroundInfo() {
+  const [data, setData] = useState({
+    diseases: {
+      diabetes: { self: false, family: false },
+      hypertension: { self: false, family: false },
+      asthma: { self: false, family: false },
+      cancer: { self: false, family: false },
+      // Add more as needed
+    },
+    medications: "",
+    otherInfo: ""
   });
+  const [loading, setLoading] = useState(true);
 
-  const [familyDiseases, setFamilyDiseases] = useState({
-    diabetes: false,
-    hypertension: false,
-    cancer: false,
-    heartDisease: false,
-    stroke: false,
-  });
+  const uid = auth.currentUser?.uid; // assume user is signed in
 
-  // Check if the user is authenticated
-  const [user, setUser] = useState(null);
-
+  // Fetch user's background info
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(setUser);
-    return () => unsubscribe(); // Cleanup the listener
-  }, []);
+    if (!uid) return;
+    const fetchData = async () => {
+      const docRef = doc(firestore, "users", uid, "backgroundInfo", "info");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setData(docSnap.data());
+      } else {
+        // Create blank doc if none exists
+        await setDoc(docRef, data);
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, [uid]);
 
-  useEffect(() => {
-    // Fetch data from Firestore if user is logged in
-    if (user) {
-      const fetchBackgroundInfo = async () => {
-        const userDocRef = doc(db, "users", user.uid, "backgroundInfo", "data");
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setSelfDiseases(data.selfDiseases || {});
-          setFamilyDiseases(data.familyDiseases || {});
+  const handleCheckbox = (disease, type) => {
+    setData((prev) => ({
+      ...prev,
+      diseases: {
+        ...prev.diseases,
+        [disease]: {
+          ...prev.diseases[disease],
+          [type]: !prev.diseases[disease][type]
         }
-      };
-      fetchBackgroundInfo();
-    }
-  }, [user]);
+      }
+    }));
+  };
+
+  const handleChange = (e) => {
+    setData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
-
-    if (!user) {
-      alert("No user is logged in!");
-      return;
-    }
-
-    const dataToSave = {
-      selfDiseases,
-      familyDiseases,
-      updatedAt: new Date().toISOString(),
-    };
+    if (!uid) return;
 
     try {
-      // Save to Firestore under "users/{userId}/backgroundInfo/data"
-      await setDoc(
-        doc(db, "users", user.uid, "backgroundInfo", "data"),
-        dataToSave
-      );
-      alert("Background info saved successfully!");
+      const docRef = doc(firestore, "users", uid, "backgroundInfo", "info");
+      await setDoc(docRef, data, { merge: true }); // merge:true to update existing
+      alert("Background info saved!");
     } catch (err) {
-      console.error("Error saving background info:", err);
-      alert("Failed to save data. Check console for details.");
+      console.error(err);
+      alert("Error saving data.");
     }
   };
 
-  // Helper function to toggle the checkbox values
-  const handleCheckboxChange = (type, disease) => {
-    if (type === "self") {
-      setSelfDiseases({
-        ...selfDiseases,
-        [disease]: !selfDiseases[disease],
-      });
-    } else if (type === "family") {
-      setFamilyDiseases({
-        ...familyDiseases,
-        [disease]: !familyDiseases[disease],
-      });
-    }
-  };
+  if (loading) return <p>Loading...</p>;
 
   return (
-    <div className="background-info">
+    <div style={{ padding: 40 }}>
       <h2>Background Info</h2>
-
-      {user ? (
-        <form onSubmit={handleSave}>
-          <div>
-            <h3>Your Health History (Self)</h3>
-            {Object.keys(selfDiseases).map((disease) => (
-              <label key={disease}>
-                <input
-                  type="checkbox"
-                  checked={selfDiseases[disease]}
-                  onChange={() => handleCheckboxChange("self", disease)}
-                />
-                {disease.charAt(0).toUpperCase() + disease.slice(1)}
-              </label>
+      <form onSubmit={handleSave}>
+        <table>
+          <thead>
+            <tr>
+              <th>Disease</th>
+              <th>You</th>
+              <th>Family</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.keys(data.diseases).map((disease) => (
+              <tr key={disease}>
+                <td>{disease}</td>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={data.diseases[disease].self}
+                    onChange={() => handleCheckbox(disease, "self")}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={data.diseases[disease].family}
+                    onChange={() => handleCheckbox(disease, "family")}
+                  />
+                </td>
+              </tr>
             ))}
-          </div>
+          </tbody>
+        </table>
 
-          <div>
-            <h3>Family Health History</h3>
-            {Object.keys(familyDiseases).map((disease) => (
-              <label key={disease}>
-                <input
-                  type="checkbox"
-                  checked={familyDiseases[disease]}
-                  onChange={() => handleCheckboxChange("family", disease)}
-                />
-                {disease.charAt(0).toUpperCase() + disease.slice(1)}
-              </label>
-            ))}
-          </div>
+        <label>
+          Medications:
+          <input
+            type="text"
+            name="medications"
+            value={data.medications}
+            onChange={handleChange}
+          />
+        </label>
 
-          <button type="submit">Save</button>
-        </form>
-      ) : (
-        <p>Please log in to submit your background information.</p>
-      )}
+        <label>
+          Other Info:
+          <textarea
+            name="otherInfo"
+            value={data.otherInfo}
+            onChange={handleChange}
+          />
+        </label>
+
+        <button type="submit">Save</button>
+      </form>
     </div>
   );
-};
-
-export default BackgroundInfo;
+}

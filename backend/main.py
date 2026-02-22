@@ -4,20 +4,26 @@ from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, File, UploadFile, Depends, HTTPException
+from fastapi import FastAPI, File, UploadFile, Depends, Form, HTTPException
 from fastapi.responses import Response
+
+from fastapi.middleware.cors import CORSMiddleware
+
 from pydantic import BaseModel
 import requests
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from extract_bloodwork import extract_bloodwork
+from bloodwork_advisor import analyze_bloodwork
+from med_recommender import get_otc_recommendation 
+
+from typing import Optional
 
 # Load .env from backend directory so it works regardless of cwd
 _load_env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(_load_env_path)
-from fastapi.middleware.cors import CORSMiddleware
+
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import tempfile
 
@@ -28,22 +34,8 @@ from cal_com import create_booking as cal_create_booking, get_available_slots as
 import firebase_admin
 from firebase_admin import credentials, auth
 
-_medication_scheduler: BackgroundScheduler | None = None
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global _medication_scheduler
-    _medication_scheduler = BackgroundScheduler()
-    _medication_scheduler.add_job(_run_medication_reminders, "cron", minute="0", hour="*")  # every hour at :00
-    _medication_scheduler.add_job(_run_medication_reminders, "cron", minute="30", hour="*")  # and at :30 to catch 8am
-    _medication_scheduler.start()
-    yield
-    if _medication_scheduler:
-        _medication_scheduler.shutdown(wait=False)
-
-
-app = FastAPI(title="Hack Axxess 2026 API", lifespan=lifespan)
+app = FastAPI(title="Hack Axxess 2026 API")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 class TranscriptBody(BaseModel):
@@ -425,3 +417,113 @@ def submit_transcript(body: TranscriptBody):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"TTS failed: {e!s}")
     return Response(content=audio_bytes, media_type="audio/mpeg")
+
+# ── Bloodwork analysis endpoint (existing) ────────────────────────────────────
+
+from typing import Optional
+from fastapi import Form
+
+@app.post("/analyze-full")
+async def analyze_full(
+    file: UploadFile = File(...),
+    age: Optional[int] = Form(None),
+    sex: Optional[str] = Form(None),
+    weight_kg: Optional[float] = Form(None),
+    height_cm: Optional[float] = Form(None),
+    activity: Optional[str] = Form(None),
+    goals: Optional[str] = Form(None),
+    diet: Optional[str] = Form(None),
+):
+    """
+    Full bloodwork pipeline:
+    1. Extract biomarkers
+    2. Build user profile
+    3. Send to Featherless
+    4. Return structured result
+    """
+
+    api_key = os.getenv("FEATHERLESS_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="FEATHERLESS_API_KEY not set in .env")
+
+    # Save uploaded PDF temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    try:
+        # Step 1: Extract bloodwork
+        bloodwork = extract_bloodwork(tmp_path)
+
+        if not bloodwork.get("biomarkers"):
+            raise HTTPException(status_code=400, detail="No biomarkers extracted.")
+
+        # Step 2: Build optional user profile
+        user_profile = {
+            k: v for k, v in {
+                "age": age,
+                "sex": sex,
+                "weight_kg": weight_kg,
+                "height_cm": height_cm,
+                "activity_level": activity,
+                "goals": goals,
+                "dietary_restrictions": diet,
+            }.items() if v is not None
+        }
+
+        # Step 3: Analyze with LLM
+        result = analyze_bloodwork(
+            bloodwork_data=bloodwork,
+            api_key=api_key,
+            user_profile=user_profile or None,
+            model="deepseek-ai/DeepSeek-R1-0528"
+        )
+
+        return {
+            "extracted_biomarkers": bloodwork["biomarkers"],
+            "flagged_biomarkers": result["flagged_biomarkers"],
+            "recommendations": result["recommendations"],
+        }
+
+    finally:
+        os.unlink(tmp_path)
+
+
+# ── OTC Medication Recommender endpoint (new) ─────────────────────────────────
+
+class OTCRequest(BaseModel):
+    disease: str
+    api_key: str = None  # Optional — falls back to env var
+
+
+@app.post("/recommend-otc")
+async def recommend_otc(body: OTCRequest):
+    """
+    Given a disease or illness name, return OTC medication recommendations
+    or a specialist referral if the condition is severe.
+
+    Request body (JSON):
+        {
+            "disease": "common cold",
+            "api_key": "your_featherless_key"   // optional if set in .env
+        }
+    """
+    if not body.disease or not body.disease.strip():
+        raise HTTPException(status_code=400, detail="'disease' field cannot be empty.")
+
+    api_key = body.api_key or os.getenv("FEATHERLESS_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Featherless API key required. Pass 'api_key' in the request body or set FEATHERLESS_API_KEY in .env.",
+        )
+
+    try:
+        result = get_otc_recommendation(disease=body.disease.strip(), api_key=api_key)
+        return result
+    except requests.exceptions.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Featherless API error: {e.response.status_code} - {e.response.text}")
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Could not connect to Featherless API.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
