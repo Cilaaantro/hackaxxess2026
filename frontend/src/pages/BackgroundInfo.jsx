@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { firestore, auth } from "../firebase";
 
+
 const DISEASE_LABELS = {
   diabetes:     { label: "Diabetes",     icon: "🩸" },
   hypertension: { label: "Hypertension", icon: "❤️" },
@@ -10,6 +11,11 @@ const DISEASE_LABELS = {
 };
 
 export default function BackgroundInfo() {
+  const user = auth.currentUser;
+  const [doctorName, setDoctorName] = useState("");
+  const [doctorEmail, setDoctorEmail] = useState("");
+  const [doctorSpecialty, setDoctorSpecialty] = useState("");
+  const [doctorStatus, setDoctorStatus] = useState(null);
   const [data, setData] = useState({
     diseases: {
       diabetes:     { self: false, family: false },
@@ -70,6 +76,63 @@ export default function BackgroundInfo() {
       setSaved({ ok: false, msg: "Error saving data." });
     }
   };
+
+
+  
+const handleSaveDoctor = async () => {
+  if (!user) return;
+  setDoctorStatus(null);
+
+  try {
+    const res = await fetch("/api/save-doctor-info", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${await user.getIdToken()}`,
+      },
+      body: JSON.stringify({
+        name: doctorName,
+        email: doctorEmail,
+        specialty: doctorSpecialty,
+      }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      setDoctorStatus("Doctor information saved!");
+    } else {
+      setDoctorStatus(data.detail || "Failed to save.");
+    }
+  } catch (err) {
+    setDoctorStatus("Error saving doctor info.");
+  }
+};
+
+useEffect(() => {
+  if (!user) return;
+
+  const fetchDoctorInfo = async () => {
+
+    try {
+      const res = await fetch("/api/get-doctor-info", {
+        headers: {
+          Authorization: `Bearer ${await user.getIdToken()}`,
+        },
+      });
+      const data = await res.json();
+
+      if (res.ok && data.doctor) {
+        setDoctorName(data.doctor.name || "");
+        setDoctorEmail(data.doctor.email || "");
+        setDoctorSpecialty(data.doctor.specialty || "");
+      }
+    } catch (err) {
+      console.error("Failed to load doctor info");
+    }
+  };
+
+  fetchDoctorInfo();
+}, [user]);
 
   if (loading) return <p className="status-info" style={{ padding: "2rem" }}>Loading…</p>;
 
@@ -132,6 +195,35 @@ export default function BackgroundInfo() {
               })}
             </div>
           </div>
+          
+          <div className="card">
+        <h3>Physician Details</h3>
+
+  <input
+    type="text"
+    placeholder="Doctor Name"
+    value={doctorName}
+    onChange={(e) => setDoctorName(e.target.value)}
+  />
+
+  <input
+    type="email"
+    placeholder="Doctor Email"
+    value={doctorEmail}
+    onChange={(e) => setDoctorEmail(e.target.value)}
+  />
+
+  <input
+    type="text"
+    placeholder="Specialty"
+    value={doctorSpecialty}
+    onChange={(e) => setDoctorSpecialty(e.target.value)}
+  />
+
+  <button onClick={handleSaveDoctor}>Save Doctor Info</button>
+
+  {doctorStatus && <p>{doctorStatus}</p>}
+</div>
 
           {/* Medications */}
           <div className="card card-accent" style={{ marginBottom: "1.1rem" }}>
