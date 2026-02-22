@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { auth, firestore } from '../firebase'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import './Chat.css'
 
 const SpeechRecognitionAPI =
@@ -18,9 +20,11 @@ export default function Chat() {
   const messagesEndRef = useRef(null)
   const audioRef = useRef(null)
 
+  // Scroll to bottom whenever messages change
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   useEffect(() => { scrollToBottom() }, [messages])
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (recognitionRef.current) recognitionRef.current.abort()
@@ -28,6 +32,7 @@ export default function Chat() {
     }
   }, [])
 
+  // --- Voice Recording ---
   const startRecording = () => {
     if (!SpeechRecognitionAPI) {
       setError('Speech recognition is not supported. Try Chrome or Edge.')
@@ -74,15 +79,30 @@ export default function Chat() {
     setInterimTranscript('')
   }
 
+  // --- Send Message & Save to Firestore ---
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || loading) return
     setError(null)
     setInput('')
+
     const userMsg = { role: 'user', content: text }
     setMessages((prev) => [...prev, userMsg])
     setLoading(true)
+
+    const user = auth.currentUser
+    if (!user) {
+      setError('No logged-in user found.')
+      setLoading(false)
+      return
+    }
+
     try {
+      // Save user message
+      const chatRef = collection(firestore, 'users', user.uid, 'chats')
+      await addDoc(chatRef, { ...userMsg, timestamp: serverTimestamp() })
+
+      // Send to backend
       const chatMessages = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }))
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -90,13 +110,15 @@ export default function Chat() {
         body: JSON.stringify({ messages: chatMessages }),
       })
       const data = await res.json()
-      if (!res.ok) {
-        setError(data.detail || 'Chat failed')
-        setMessages((prev) => prev.slice(0, -1))
-        return
-      }
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.message }])
+      if (!res.ok) throw new Error(data.detail || 'Chat failed')
+
+      const assistantMsg = { role: 'assistant', content: data.message }
+      setMessages((prev) => [...prev, assistantMsg])
+
+      // Save assistant response
+      await addDoc(chatRef, { ...assistantMsg, timestamp: serverTimestamp() })
     } catch (err) {
+      console.error(err)
       setError(err.message || 'Chat failed')
       setMessages((prev) => prev.slice(0, -1))
     } finally {
@@ -104,6 +126,7 @@ export default function Chat() {
     }
   }
 
+  // --- Text-to-Speech ---
   const playTTS = async (content, id) => {
     if (!content?.trim() || playingId !== null) return
     setPlayingId(id)
@@ -140,6 +163,7 @@ export default function Chat() {
         <Link to="/">← Home</Link>
       </nav>
       <h1>Chat</h1>
+
       <div className="chat-messages" role="log" aria-live="polite">
         {messages.length === 0 && (
           <p className="chat-placeholder">Send a message or use the mic to speak.</p>
@@ -170,7 +194,9 @@ export default function Chat() {
         )}
         <div ref={messagesEndRef} />
       </div>
+
       {error && <p className="chat-error" role="alert">{error}</p>}
+
       <div className="chat-input-wrap">
         <input
           type="text"
