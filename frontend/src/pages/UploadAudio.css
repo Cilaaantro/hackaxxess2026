@@ -177,6 +177,13 @@
   margin: 0;
 }
 
+.upload-audio-player {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  margin-top: 0.5rem;
+}
+
 .upload-audio-submit {
   align-self: flex-start;
 }

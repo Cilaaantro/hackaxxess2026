@@ -12,15 +12,24 @@ export default function UploadAudio() {
   const [error, setError] = useState(null)
   const [transcript, setTranscript] = useState('')
   const [interimTranscript, setInterimTranscript] = useState('')
+  const [audioUrl, setAudioUrl] = useState(null)
   const recognitionRef = useRef(null)
+  const audioRef = useRef(null)
 
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.abort()
       }
+      if (audioUrl) URL.revokeObjectURL(audioUrl)
     }
-  }, [])
+  }, [audioUrl])
+
+  useEffect(() => {
+    if (!audioUrl || !audioRef.current) return
+    audioRef.current.src = audioUrl
+    audioRef.current.play().catch(() => {})
+  }, [audioUrl])
 
   const startRecording = async () => {
     setError(null)
@@ -89,21 +98,28 @@ export default function UploadAudio() {
     if (!text) return
     setSubmitStatus('submitting')
     setError(null)
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl)
+      setAudioUrl(null)
+    }
     try {
       const res = await fetch('/api/transcript', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: text }),
       })
-      const data = await res.json()
       if (!res.ok) {
-        setError(data.detail ?? 'Failed to send transcript')
+        const data = await res.json().catch(() => ({}))
+        setError(data.detail ?? 'Failed to get audio')
         setSubmitStatus('error')
         return
       }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      setAudioUrl(url)
       setSubmitStatus('success')
     } catch (err) {
-      setError(err.message ?? 'Failed to send transcript')
+      setError(err.message ?? 'Failed to get audio')
       setSubmitStatus('error')
     }
   }
@@ -170,7 +186,12 @@ export default function UploadAudio() {
           </button>
         )}
         {submitStatus === 'success' && (
-          <p className="upload-audio-success">Transcript sent to the server.</p>
+          <>
+            <p className="upload-audio-success">Transcript sent. Playing TTS audio.</p>
+            {audioUrl && (
+              <audio ref={audioRef} src={audioUrl} controls className="upload-audio-player" />
+            )}
+          </>
         )}
         {error && (
           <p className="upload-audio-error" role="alert">{error}</p>
