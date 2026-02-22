@@ -4,3 +4,5 @@ speech.mp3
 audio/
 serviceAccountKey.json
 __pycache__/
+medication_reminder_subscribers.json
+medication_reminder_sent.json
