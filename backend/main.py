@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, File, UploadFile, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
-
-# backend/main.py
+from extract_bloodwork import extract_bloodwork
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import tempfile
 
 from tts import text_to_speech
 
@@ -31,6 +31,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.post("/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    
+    result = extract_bloodwork(tmp_path)
+    return result
 
 # Firebase token security
 security = HTTPBearer()
