@@ -1,4 +1,13 @@
+<<<<<<< HEAD
 .venv
 sample_bloodwork.pdf
 .env
 __pycache__
+=======
+.venv
+.env
+speech.mp3
+audio/
+serviceAccountKey.json
+__pycache__/
+>>>>>>> 1fb7e10b82397027fa98a767560b95505a5271be

@@ -16,6 +16,65 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 # ── Health check ──────────────────────────────────────────────────────────────
 
+class TranscriptBody(BaseModel):
+    transcript: str
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class ChatBody(BaseModel):
+    messages: list[ChatMessage]
+
+
+class SendEmailBody(BaseModel):
+    email: str
+
+# Initialize Firebase Admin
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred)
+
+# CORS for frontend (Vite default port 5173)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.post("/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    
+    result = extract_bloodwork(tmp_path)
+    return result
+
+# Firebase token security
+security = HTTPBearer()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        decoded_token = auth.verify_id_token(credentials.credentials)
+        return decoded_token
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+@app.get("/protected")
+def protected_route(user=Depends(verify_token)):
+    return {
+        "message": "You are authenticated",
+        "user_id": user["uid"],
+        "email": user["email"]
+    }
+
 @app.get("/")
 def root():
     return {"status": "ok"}
