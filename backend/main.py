@@ -7,6 +7,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import tempfile
 
 from tts import text_to_speech
+from chatbot import chat as chatbot_chat
 
 import firebase_admin
 from firebase_admin import credentials, auth
@@ -16,6 +17,15 @@ app = FastAPI(title="Hack Axxess 2026 API")
 
 class TranscriptBody(BaseModel):
     transcript: str
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class ChatBody(BaseModel):
+    messages: list[ChatMessage]
 
 # Initialize Firebase Admin
 cred = credentials.Certificate("serviceAccountKey.json")
@@ -70,6 +80,20 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/chat")
+def chat_endpoint(body: ChatBody):
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="messages cannot be empty")
+    try:
+        msg_list = [{"role": m.role, "content": m.content} for m in body.messages]
+        reply = chatbot_chat(msg_list)
+        return {"message": reply}
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Chat failed: {e!s}")
 
 
 @app.post("/transcript")
