@@ -30,6 +30,7 @@ import tempfile
 from tts import text_to_speech
 from chatbot import chat as chatbot_chat
 from cal_com import create_booking as cal_create_booking, get_available_slots as cal_get_available_slots
+from sicknessPredictor import predict_disease
 
 import firebase_admin
 from firebase_admin import credentials, auth
@@ -504,6 +505,120 @@ async def analyze_full(
 
     finally:
         os.unlink(tmp_path)
+
+
+# ── Disease prediction endpoint ──────────────────────────────────────────────
+
+class PredictDiseaseBody(BaseModel):
+    symptoms: dict  # e.g. {"bronchial_asthma_patient": 0, "itching": 1, ...}
+
+
+@app.post("/predict-disease")
+def predict_disease_endpoint(body: PredictDiseaseBody):
+    """Accept a symptom dict and return the predicted disease label."""
+    if not body.symptoms:
+        raise HTTPException(status_code=400, detail="symptoms dict is required")
+    try:
+        disease = predict_disease(body.symptoms)
+        return {"disease": disease}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {e!s}")
+
+
+class PredictRecommendBody(BaseModel):
+    symptoms: dict
+    patient_name: str = "the patient"
+    patient_email: str = ""
+    doctor_email: str = ""
+
+
+@app.post("/predict-and-recommend")
+def predict_and_recommend(body: PredictRecommendBody):
+    """
+    1. Predict disease from symptom dict.
+    2. Get OTC recommendation from Featherless.
+    3. Send doctor notification email (if doctor_email provided).
+    Returns disease label + OTC recommendation text.
+    """
+    if not body.symptoms:
+        raise HTTPException(status_code=400, detail="symptoms dict is required")
+
+    # Step 1 — predict
+    try:
+        disease = predict_disease(body.symptoms)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {e!s}")
+
+    # Step 2 — recommend OTC
+    api_key = os.getenv("FEATHERLESS_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="FEATHERLESS_API_KEY not set in .env")
+    try:
+        result = get_otc_recommendation(disease=disease, api_key=api_key)
+        recommendation = result["recommendation"]
+    except requests.exceptions.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Featherless API error: {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Recommendation failed: {e!s}")
+
+    # Step 3 — email doctor (best-effort, don't fail the request if email fails)
+    doctor_email = (body.doctor_email or "").strip()
+    email_sent = False
+    email_error = None
+    if doctor_email:
+        try:
+            resend_key = (os.getenv("RESEND_API_KEY") or "").strip().strip('"').strip("'")
+            from_email = os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
+            patient_name = body.patient_name or "the patient"
+            selected_symptoms = [k for k, v in body.symptoms.items() if v == 1]
+            symptom_list = "\n".join(f"  • {s.replace('_', ' ').title()}" for s in selected_symptoms) or "  (none reported)"
+            today = datetime.now().strftime("%B %d, %Y")
+            email_body = (
+                f"Dear Doctor,\n\n"
+                f"This is an automated notification from Health Bridge regarding your patient, "
+                f"{patient_name}.\n\n"
+                f"On {today}, {patient_name} submitted a symptom report through the Health Bridge platform. "
+                f"Based on the reported symptoms, our AI model has flagged a possible condition that may "
+                f"warrant your attention.\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"REPORTED SYMPTOMS ({len(selected_symptoms)})\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{symptom_list}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"POSSIBLE CONDITION (AI-generated)\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{disease.replace('_', ' ').title()}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"OTC STEPS PROVIDED TO PATIENT\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{recommendation}\n\n"
+                f"Please follow up with {patient_name} as you see fit. This notification is generated "
+                f"by AI and is intended for informational purposes only — it is not a clinical diagnosis.\n\n"
+                f"Best regards,\n"
+                f"Health Bridge Platform"
+            )
+            r = requests.post(
+                RESEND_EMAILS_URL,
+                headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                json={
+                    "from": from_email,
+                    "to": [doctor_email],
+                    "subject": f"[Health Bridge] Patient Symptom Report — {patient_name} — {today}",
+                    "text": email_body,
+                },
+                timeout=10,
+            )
+            r.raise_for_status()
+            email_sent = True
+        except Exception as exc:
+            email_error = str(exc)
+
+    return {
+        "disease": disease,
+        "recommendation": recommendation,
+        "email_sent": email_sent,
+        "email_error": email_error,
+    }
 
 
 # ── OTC Medication Recommender endpoint (new) ─────────────────────────────────
