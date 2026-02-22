@@ -18,6 +18,7 @@ import tempfile
 
 from tts import text_to_speech
 from chatbot import chat as chatbot_chat
+from cal_com import create_booking as cal_create_booking, get_available_slots as cal_get_available_slots
 
 import firebase_admin
 from firebase_admin import credentials, auth
@@ -40,6 +41,13 @@ class ChatBody(BaseModel):
 
 class SendEmailBody(BaseModel):
     email: str
+
+
+class CreateAppointmentBody(BaseModel):
+    start: str  # ISO 8601 UTC, e.g. 2024-08-13T18:00:00Z
+    name: str
+    email: str
+    time_zone: str = "America/New_York"
 
 # Initialize Firebase Admin
 cred = credentials.Certificate("serviceAccountKey.json")
@@ -150,6 +158,90 @@ def send_welcome_email(body: SendEmailBody):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to send email: {e!s}")
+
+
+@app.get("/available-slots")
+def available_slots(
+    start: str,
+    end: str,
+    time_zone: str = "America/New_York",
+):
+    """Return available Cal.com slots for the given date range (start/end as YYYY-MM-DD). Respects your Cal.com availability (e.g. Mon–Fri 9–5)."""
+    load_dotenv(_load_env_path)
+    event_type_id = os.getenv("CAL_EVENT_TYPE_ID")
+    event_type_id = int(event_type_id) if event_type_id and str(event_type_id).isdigit() else None
+    event_type_slug = (os.getenv("CAL_EVENT_TYPE_SLUG") or "").strip() or None
+    username = (os.getenv("CAL_USERNAME") or "").strip() or None
+    organization_slug = (os.getenv("CAL_ORGANIZATION_SLUG") or "").strip() or None
+    raw_minutes = os.getenv("CAL_LENGTH_IN_MINUTES")
+    duration_minutes = int(raw_minutes) if raw_minutes and str(raw_minutes).isdigit() else None
+    try:
+        data = cal_get_available_slots(
+            start=start.strip(),
+            end=end.strip(),
+            time_zone=time_zone or "America/New_York",
+            event_type_id=event_type_id,
+            event_type_slug=event_type_slug,
+            username=username,
+            organization_slug=organization_slug,
+            duration_minutes=duration_minutes,
+        )
+        return {"slots": data}
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except requests.RequestException as e:
+        err = getattr(e, "response", None)
+        msg = str(e)
+        if err is not None and getattr(err, "text", None):
+            try:
+                data = err.json()
+                msg = data.get("message") or data.get("detail") or msg
+            except Exception:
+                pass
+        raise HTTPException(status_code=502, detail=f"Cal.com slots failed: {msg}")
+
+
+@app.post("/create-appointment")
+def create_appointment(body: CreateAppointmentBody):
+    """Create a Cal.com booking. Set CAL_API_KEY and CAL_EVENT_TYPE_ID (or CAL_EVENT_TYPE_SLUG + CAL_USERNAME) in .env."""
+    load_dotenv(_load_env_path)
+    start = (body.start or "").strip()
+    name = (body.name or "").strip()
+    email = (body.email or "").strip()
+    if not start or not name or not email:
+        raise HTTPException(status_code=400, detail="start, name, and email are required")
+    event_type_id = os.getenv("CAL_EVENT_TYPE_ID")
+    event_type_id = int(event_type_id) if event_type_id and str(event_type_id).isdigit() else None
+    event_type_slug = (os.getenv("CAL_EVENT_TYPE_SLUG") or "").strip() or None
+    username = (os.getenv("CAL_USERNAME") or "").strip() or None
+    organization_slug = (os.getenv("CAL_ORGANIZATION_SLUG") or "").strip() or None
+    raw_minutes = os.getenv("CAL_LENGTH_IN_MINUTES")
+    length_in_minutes = int(raw_minutes) if raw_minutes and str(raw_minutes).isdigit() else None
+    try:
+        result = cal_create_booking(
+            start=start,
+            name=name,
+            email=email,
+            time_zone=body.time_zone or "America/New_York",
+            event_type_id=event_type_id,
+            event_type_slug=event_type_slug,
+            username=username,
+            organization_slug=organization_slug,
+            length_in_minutes=length_in_minutes,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except requests.RequestException as e:
+        err = getattr(e, "response", None)
+        msg = str(e)
+        if err is not None and getattr(err, "text", None):
+            try:
+                data = err.json()
+                msg = data.get("message") or data.get("detail") or msg
+            except Exception:
+                pass
+        raise HTTPException(status_code=502, detail=f"Cal.com booking failed: {msg}")
 
 
 @app.post("/send-password-reset-email")
