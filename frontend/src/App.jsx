@@ -5,6 +5,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import Login from "./Login";
 import Upload from "./Upload";
 import Chat from "./pages/Chat";
+import Appointments from "./pages/Appointments";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -81,12 +82,14 @@ function App() {
 
             <nav style={{ marginBottom: "20px" }}>
               <Link to="/" style={{ marginRight: "12px" }}>Home</Link>
-              <Link to="/chat">Chat</Link>
+              <Link to="/chat" style={{ marginRight: "12px" }}>Chat</Link>
+              <Link to="/appointments">Appointments</Link>
             </nav>
 
             <Routes>
               <Route path="/" element={<Upload />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/appointments" element={<Appointments />} />
             </Routes>
           </>
         )}
