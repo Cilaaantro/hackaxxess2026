@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
+
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 FEATHERLESS_URL = "https://api.featherless.ai/v1/chat/completions"
 DEFAULT_SYSTEM = "You are a helpful assistant."

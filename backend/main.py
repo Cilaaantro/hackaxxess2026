@@ -1,7 +1,17 @@
+import os
+from pathlib import Path
+
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
+import requests
+from dotenv import load_dotenv
+
 from extract_bloodwork import extract_bloodwork
+
+# Load .env from backend directory so it works regardless of cwd
+_load_env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(_load_env_path)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import tempfile
@@ -27,11 +37,13 @@ class ChatMessage(BaseModel):
 class ChatBody(BaseModel):
     messages: list[ChatMessage]
 
+
+class SendEmailBody(BaseModel):
+    email: str
+
 # Initialize Firebase Admin
 cred = credentials.Certificate("serviceAccountKey.json")
 firebase_admin.initialize_app(cred)
-
-app = FastAPI()
 
 # CORS for frontend (Vite default port 5173)
 app.add_middleware(
@@ -94,6 +106,73 @@ def chat_endpoint(body: ChatBody):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Chat failed: {e!s}")
+
+
+FIREBASE_SEND_EMAIL_URL = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode"
+
+
+RESEND_EMAILS_URL = "https://api.resend.com/emails"
+
+
+def _send_welcome_email(to_email: str) -> None:
+    """Send a welcome email via Resend API. Raises on failure."""
+    api_key = (os.getenv("RESEND_API_KEY") or "").strip().strip('"').strip("'")
+    if not api_key:
+        raise ValueError("RESEND_API_KEY must be set in .env")
+    from_email = os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
+    r = requests.post(
+        RESEND_EMAILS_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "from": from_email,
+            "to": [to_email],
+            "subject": "Welcome to Bloodwork Analyzer",
+            "text": "Hi,\n\nWelcome to Bloodwork Analyzer!\n",
+        },
+        timeout=10,
+    )
+    r.raise_for_status()
+
+
+@app.post("/send-welcome-email")
+def send_welcome_email(body: SendEmailBody):
+    """Send a custom welcome email: 'Hi, welcome to Bloodwork Analyzer'."""
+    email = (body.email or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    try:
+        _send_welcome_email(email)
+        return {"message": "Welcome email sent."}
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to send email: {e!s}")
+
+
+@app.post("/send-password-reset-email")
+def send_password_reset_email(body: SendEmailBody):
+    """Ask Firebase Auth to send a password reset email to the given address."""
+    email = (body.email or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    api_key = os.getenv("FIREBASE_WEB_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="FIREBASE_WEB_API_KEY is not set")
+    try:
+        r = requests.post(
+            f"{FIREBASE_SEND_EMAIL_URL}?key={api_key}",
+            json={"requestType": "PASSWORD_RESET", "email": email},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            # Don't leak whether the email exists; return generic message
+            return {"message": "If an account exists for this email, a reset link was sent."}
+        return {"message": "Password reset email sent."}
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"Failed to send email: {e!s}")
 
 
 @app.post("/transcript")

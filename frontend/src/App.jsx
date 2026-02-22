@@ -8,11 +8,14 @@ import Chat from "./pages/Chat";
 
 function App() {
   const [user, setUser] = useState(null);
+  const [emailToSend, setEmailToSend] = useState("");
+  const [emailStatus, setEmailStatus] = useState(null);
 
   // Listen for login state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      if (currentUser?.email) setEmailToSend(currentUser.email);
     });
 
     return () => unsubscribe();
@@ -21,6 +24,27 @@ function App() {
   const handleLogout = async () => {
     await signOut(auth);
     setUser(null);
+  };
+
+  const handleSendEmail = async () => {
+    const email = emailToSend.trim();
+    if (!email) return;
+    setEmailStatus(null);
+    try {
+      const res = await fetch("/api/send-welcome-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEmailStatus("Welcome email sent to " + email);
+      } else {
+        setEmailStatus(data.detail || "Failed to send email.");
+      }
+    } catch (err) {
+      setEmailStatus(err.message || "Failed to send email.");
+    }
   };
 
   return (
@@ -36,6 +60,23 @@ function App() {
               <p><strong>Name:</strong> {user.displayName}</p>
               <p><strong>Email:</strong> {user.email}</p>
               <button onClick={handleLogout}>Logout</button>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "6px" }}>Send welcome email to:</label>
+              <input
+                type="email"
+                value={emailToSend}
+                onChange={(e) => setEmailToSend(e.target.value)}
+                placeholder="email@example.com"
+                style={{ marginRight: "8px", padding: "6px 10px", width: "240px" }}
+              />
+              <button onClick={handleSendEmail}>Send email</button>
+              {emailStatus && (
+                <p style={{ marginTop: "8px", fontSize: "14px", color: emailStatus.startsWith("Welcome email sent") ? "green" : "crimson" }}>
+                  {emailStatus}
+                </p>
+              )}
             </div>
 
             <nav style={{ marginBottom: "20px" }}>
