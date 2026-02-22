@@ -1,55 +1,55 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
 import Login from "./Login";
+import Layout from "./components/Layout";
+import Profile from "./pages/Profile";
+import Dashboard from "./pages/Dashboard";
 import Upload from "./Upload";
 import Chat from "./pages/Chat";
+import Appointments from "./pages/Appointments";
+import BackgroundInfo from "./pages/BackgroundInfo";
+import Symptoms from "./pages/Symptoms";
 
 function App() {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Listen for login state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    setUser(null);
-  };
+  if (loading) {
+    return (
+      <div className="login-wrap">
+        <p style={{ color: "var(--warm-text-muted)" }}>Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
-      <div style={{ padding: "40px", fontFamily: "Arial" }}>
-        <h1>Bloodwork Analyzer</h1>
-
-        {!user ? (
-          <Login setUser={setUser} />
-        ) : (
-          <>
-            <div style={{ marginBottom: "20px" }}>
-              <p><strong>Name:</strong> {user.displayName}</p>
-              <p><strong>Email:</strong> {user.email}</p>
-              <button onClick={handleLogout}>Logout</button>
-            </div>
-
-            <nav style={{ marginBottom: "20px" }}>
-              <Link to="/" style={{ marginRight: "12px" }}>Home</Link>
-              <Link to="/chat">Chat</Link>
-            </nav>
-
-            <Routes>
-              <Route path="/" element={<Upload />} />
-              <Route path="/chat" element={<Chat />} />
-            </Routes>
-          </>
-        )}
-      </div>
+      {!user ? (
+        <Login setUser={setUser} />
+      ) : (
+        <Routes>
+          <Route element={<Layout user={user} />}>
+            <Route path="/" element={<Profile />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/upload" element={<Upload />} />
+            <Route path="/appointments" element={<Appointments />} />
+            <Route path="/symptoms" element={<Symptoms />} />
+            <Route path="/background-info" element={<BackgroundInfo />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      )}
     </BrowserRouter>
   );
 }
