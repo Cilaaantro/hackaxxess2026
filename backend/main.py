@@ -32,16 +32,11 @@ from chatbot import chat as chatbot_chat
 from cal_com import create_booking as cal_create_booking, get_available_slots as cal_get_available_slots
 
 import firebase_admin
-from firebase_admin import credentials, auth, firestore
+from firebase_admin import credentials, auth
 
 app = FastAPI(title="Hack Axxess 2026 API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Initialize Firebase Admin
-cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
-
-db = firestore.client()
 
 class TranscriptBody(BaseModel):
     transcript: str
@@ -54,6 +49,8 @@ class ChatMessage(BaseModel):
 
 class ChatBody(BaseModel):
     messages: list[ChatMessage]
+    mode: str = "general"  # "general" | "checkin"
+    user_context: dict = {}  # biomarkers + backgroundInfo injected by the frontend
 
 
 class SendEmailBody(BaseModel):
@@ -70,11 +67,8 @@ class CreateAppointmentBody(BaseModel):
 class MedicationReminderSubscribeBody(BaseModel):
     email: str
     time_zone: str = "America/New_York"
-
-class DoctorInfoBody(BaseModel):
-    name: str
-    email: str
-    specialty: str
+    remind_hour: int = 8    # 0-23 local time
+    remind_minute: int = 0  # 0-59
 
 
 # Medication reminder: subscriber list and "sent today" tracking (backend dir)
@@ -140,7 +134,7 @@ def _send_medication_reminder_email(to_email: str) -> None:
 
 
 def _run_medication_reminders() -> None:
-    """For each subscriber, if it's 8am in their timezone and we haven't sent today, send reminder."""
+    """For each subscriber, check if it's their custom reminder time and send if not yet sent today."""
     load_dotenv(_load_env_path)
     if not (os.getenv("RESEND_API_KEY") or "").strip():
         return
@@ -152,12 +146,14 @@ def _run_medication_reminders() -> None:
     for sub in subscribers:
         email = (sub.get("email") or "").strip()
         tz_name = (sub.get("time_zone") or "America/New_York").strip()
+        remind_hour = int(sub.get("remind_hour", 8))
+        remind_minute = int(sub.get("remind_minute", 0))
         if not email:
             continue
         try:
             tz = ZoneInfo(tz_name)
             local = now_utc.astimezone(tz)
-            if local.hour != 23 or local.minute != 0:
+            if local.hour != remind_hour or local.minute != remind_minute:
                 continue
             if sent.get(email) == today:
                 continue
@@ -170,7 +166,9 @@ def _run_medication_reminders() -> None:
         _save_medication_sent_today(sent)
 
 
-
+# Initialize Firebase Admin
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred)
 
 # CORS for frontend (Vite default port 5173)
 app.add_middleware(
@@ -227,7 +225,7 @@ def chat_endpoint(body: ChatBody):
         raise HTTPException(status_code=400, detail="messages cannot be empty")
     try:
         msg_list = [{"role": m.role, "content": m.content} for m in body.messages]
-        reply = chatbot_chat(msg_list)
+        reply = chatbot_chat(msg_list, mode=body.mode, user_context=body.user_context or {})
         return {"message": reply}
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -281,17 +279,28 @@ def send_welcome_email(body: SendEmailBody):
 
 @app.post("/subscribe-medication-reminder")
 def subscribe_medication_reminder(body: MedicationReminderSubscribeBody):
-    """Subscribe to daily 8am email reminder to take medication. Uses your timezone so 8am is local."""
+    """Subscribe to a daily medication reminder at a custom local time."""
     email = (body.email or "").strip()
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
     tz = (body.time_zone or "America/New_York").strip()
+    remind_hour = max(0, min(23, int(body.remind_hour)))
+    remind_minute = max(0, min(59, int(body.remind_minute)))
+    # Format display time e.g. "8:05 AM"
+    display_hour = remind_hour % 12 or 12
+    ampm = "AM" if remind_hour < 12 else "PM"
+    display_time = f"{display_hour}:{remind_minute:02d} {ampm}"
     subscribers = _load_medication_subscribers()
-    if any((s.get("email") or "").strip().lower() == email.lower() for s in subscribers):
-        return {"message": "You're already subscribed. You'll get a reminder at 8am daily in your timezone."}
-    subscribers.append({"email": email, "time_zone": tz})
+    # Update if already subscribed, otherwise append
+    existing = next((s for s in subscribers if (s.get("email") or "").strip().lower() == email.lower()), None)
+    if existing:
+        existing["time_zone"] = tz
+        existing["remind_hour"] = remind_hour
+        existing["remind_minute"] = remind_minute
+    else:
+        subscribers.append({"email": email, "time_zone": tz, "remind_hour": remind_hour, "remind_minute": remind_minute})
     _save_medication_subscribers(subscribers)
-    return {"message": "Subscribed! You'll get a daily reminder at 8am in your timezone."}
+    return {"message": f"Reminder set for {display_time} daily in your timezone."}
 
 
 @app.post("/unsubscribe-medication-reminder")
@@ -388,40 +397,7 @@ def create_appointment(body: CreateAppointmentBody):
             except Exception:
                 pass
         raise HTTPException(status_code=502, detail=f"Cal.com booking failed: {msg}")
-    
 
-    
-
-@app.post("/save-doctor-info")
-def save_doctor_info(
-    body: DoctorInfoBody,
-    user=Depends(verify_token)
-):
-    uid = user["uid"]
-
-    doc_ref = db.collection("users").document(uid)
-
-    doc_ref.set({
-        "doctor": {
-            "name": body.name,
-            "email": body.email,
-            "specialty": body.specialty
-        },
-        "updatedAt": datetime.utcnow()
-    }, merge=True)
-
-    return {"message": "Doctor information saved successfully"}
-
-@app.get("/get-doctor-info")
-def get_doctor_info(user=Depends(verify_token)):
-    uid = user["uid"]
-    doc = db.collection("users").document(uid).get()
-
-    if not doc.exists:
-        return {"doctor": None}
-
-    data = doc.to_dict()
-    return {"doctor": data.get("doctor")}
 
 @app.post("/send-password-reset-email")
 def send_password_reset_email(body: SendEmailBody):

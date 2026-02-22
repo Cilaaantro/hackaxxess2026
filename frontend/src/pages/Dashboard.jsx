@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { auth } from "../firebase";
+import { auth, firestore } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
 
@@ -9,9 +10,31 @@ function ChatWidget() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [userContext, setUserContext] = useState({});
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Fetch patient context once on mount
+  useEffect(() => {
+    const fetchContext = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      try {
+        const [userSnap, bgSnap] = await Promise.all([
+          getDoc(doc(firestore, "users", user.uid)),
+          getDoc(doc(firestore, "users", user.uid, "backgroundInfo", "info")),
+        ]);
+        setUserContext({
+          biomarkers: userSnap.exists() ? (userSnap.data().biomarkers || null) : null,
+          backgroundInfo: bgSnap.exists() ? bgSnap.data() : null,
+        });
+      } catch (e) {
+        console.warn("Could not load patient context:", e);
+      }
+    };
+    fetchContext();
+  }, []);
 
   const send = async () => {
     const text = input.trim();
@@ -24,7 +47,10 @@ function ChatWidget() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({
+          messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
+          user_context: userContext,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Chat failed");
@@ -93,6 +119,7 @@ function ChatWidget() {
 function ReminderWidget() {
   const user = auth.currentUser;
   const [email, setEmail] = useState(user?.email || "");
+  const [time, setTime] = useState("08:00");
   const [status, setStatus] = useState(null);
   const [subscribed, setSubscribed] = useState(false);
 
@@ -100,16 +127,19 @@ function ReminderWidget() {
     const em = email.trim();
     if (!em) return;
     setStatus(null);
+    const [hourStr, minStr] = time.split(":");
+    const remind_hour = parseInt(hourStr, 10);
+    const remind_minute = parseInt(minStr, 10);
     try {
       const res = await fetch("/api/subscribe-medication-reminder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: em, time_zone: timeZone }),
+        body: JSON.stringify({ email: em, time_zone: timeZone, remind_hour, remind_minute }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setSubscribed(true);
-        setStatus({ ok: true, msg: data.message || "You're subscribed!" });
+        setStatus({ ok: true, msg: data.message || "Reminder set!" });
       } else {
         setStatus({ ok: false, msg: data.detail || "Failed to subscribe." });
       }
@@ -118,13 +148,17 @@ function ReminderWidget() {
     }
   };
 
+  // Format display time for success state
+  const [h, m] = time.split(":").map(Number);
+  const displayTime = `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+
   return (
     <div className="widget widget--reminder">
       <div className="widget-header">
         <span className="widget-icon">💊</span>
         <div>
           <h3 className="widget-title">Medication reminder</h3>
-          <p className="widget-subtitle">Daily 8am email alert</p>
+          <p className="widget-subtitle">Daily email at your chosen time</p>
         </div>
       </div>
 
@@ -132,33 +166,40 @@ function ReminderWidget() {
         <div className="reminder-success">
           <div className="reminder-success-icon">✓</div>
           <p className="reminder-success-text">
-            Reminder set for <strong>8am</strong> in your timezone.<br />
-            We'll email <strong>{email}</strong> daily.
+            Reminder set for <strong>{displayTime}</strong> daily.<br />
+            We'll email <strong>{email}</strong> every day.
           </p>
         </div>
       ) : (
         <>
           <p className="widget-body">
-            Get a daily nudge at 8am to take your medication. Never miss a dose.
+            Choose a time and we'll send you a daily nudge to take your medication.
           </p>
-          <div className="widget-input-row">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="your@email.com"
+            style={{ maxWidth: "none" }}
+          />
+          <div className="reminder-time-row">
+            <label className="reminder-time-label">Remind me at</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
-              style={{ maxWidth: "none", flex: 1 }}
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="reminder-time-input"
             />
-            <button
-              type="button"
-              onClick={subscribe}
-              style={{ borderRadius: "var(--warm-radius-pill)", whiteSpace: "nowrap" }}
-            >
-              Set reminder
-            </button>
           </div>
+          <button
+            type="button"
+            onClick={subscribe}
+            style={{ borderRadius: "var(--warm-radius-pill)" }}
+          >
+            Set reminder
+          </button>
           {status && (
-            <p className={status.ok ? "status-ok" : "status-err"} style={{ marginTop: "0.5rem" }}>
+            <p className={status.ok ? "status-ok" : "status-err"} style={{ marginTop: "0.25rem" }}>
               {status.msg}
             </p>
           )}
