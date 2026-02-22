@@ -1280,6 +1280,36 @@ input:focus, textarea:focus {
   margin: 0;
 }
 
+/* ── Reminder time picker ────────────────────────────────────────────────── */
+.reminder-time-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.reminder-time-label {
+  font-size: 0.875rem;
+  color: var(--warm-text-muted);
+  white-space: nowrap;
+}
+
+.reminder-time-input {
+  padding: 0.45rem 0.65rem;
+  border: 1.5px solid var(--warm-border);
+  border-radius: var(--warm-radius);
+  font-size: 0.9rem;
+  color: var(--warm-text);
+  background: var(--warm-surface);
+  cursor: pointer;
+  width: auto;
+}
+
+.reminder-time-input:focus {
+  outline: none;
+  border-color: var(--warm-primary);
+  box-shadow: 0 0 0 3px rgba(180, 100, 60, 0.12);
+}
+
 /* ── Appointment widget ──────────────────────────────────────────────────── */
 .appt-next {
   background: var(--warm-bg);
