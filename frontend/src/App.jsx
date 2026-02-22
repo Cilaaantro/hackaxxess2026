@@ -6,6 +6,7 @@ import Login from "./Login";
 import Upload from "./Upload";
 import Chat from "./pages/Chat";
 import Appointments from "./pages/Appointments";
+import BackgroundInfo from "./pages/BackgroundInfo.jsx";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -84,12 +85,14 @@ function App() {
               <Link to="/" style={{ marginRight: "12px" }}>Home</Link>
               <Link to="/chat" style={{ marginRight: "12px" }}>Chat</Link>
               <Link to="/appointments">Appointments</Link>
+              <Link to="/background-info">Background Info</Link>
             </nav>
 
             <Routes>
               <Route path="/" element={<Upload />} />
               <Route path="/chat" element={<Chat />} />
               <Route path="/appointments" element={<Appointments />} />
+              <Route path="/background-info" element={<BackgroundInfo /> } />
             </Routes>
           </>
         )}
