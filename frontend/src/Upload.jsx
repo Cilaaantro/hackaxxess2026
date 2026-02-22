@@ -1,6 +1,14 @@
 import { useState, useRef } from "react";
 import { auth, firestore } from "./firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
+
+// Schema keys the Firestore user document expects under `biomarkers`.
+// Values from the extractor are mapped here; unknown keys are stored as-is.
+const SCHEMA_BIOMARKER_KEYS = [
+  "bun", "creatinine", "ferritin", "hba1c", "hematocrit",
+  "hemoglobin", "iron", "platelets", "total_cholesterol",
+  "triglycerides", "tsh", "vitamin_b12", "wbc",
+];
 
 export default function Upload() {
   const [file, setFile] = useState(null);
@@ -49,6 +57,7 @@ export default function Upload() {
       const data = await res.json();
       setResult(data);
 
+      // Save full report to the reports sub-collection
       await addDoc(collection(firestore, "users", user.uid, "reports"), {
         extracted_biomarkers: data.extracted_biomarkers,
         flagged_biomarkers: data.flagged_biomarkers,
@@ -56,6 +65,28 @@ export default function Upload() {
         pdf_filename: file.name,
         created_at: serverTimestamp(),
       });
+
+      // Build the biomarkers map using only the known schema keys (as numbers)
+      const raw = data.extracted_biomarkers || {};
+      const biomarkers = {};
+      for (const key of SCHEMA_BIOMARKER_KEYS) {
+        if (key in raw) {
+          biomarkers[key] = Number(raw[key]);
+        }
+      }
+      // Also persist any extra keys the extractor found that aren't in the schema
+      for (const [key, val] of Object.entries(raw)) {
+        if (!(key in biomarkers)) {
+          biomarkers[key] = Number(val);
+        }
+      }
+
+      // Merge biomarkers into the top-level users/{uid} document
+      await setDoc(
+        doc(firestore, "users", user.uid),
+        { biomarkers, biomarkers_updated_at: serverTimestamp() },
+        { merge: true }
+      );
 
       setStatus("Analysis complete and saved!");
     } catch (error) {

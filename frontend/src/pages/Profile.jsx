@@ -9,6 +9,7 @@ export default function Profile() {
   const [emailToSend, setEmailToSend] = useState(user?.email || "");
   const [emailStatus, setEmailStatus] = useState(null);
   const [reminderEmail, setReminderEmail] = useState(user?.email || "");
+  const [reminderTime, setReminderTime] = useState("08:00");
   const [reminderStatus, setReminderStatus] = useState(null);
 
   useEffect(() => {
@@ -43,11 +44,14 @@ export default function Profile() {
     const email = reminderEmail.trim();
     if (!email) return;
     setReminderStatus(null);
+    const [hourStr, minStr] = reminderTime.split(":");
+    const remind_hour = parseInt(hourStr, 10);
+    const remind_minute = parseInt(minStr, 10);
     try {
       const res = await fetch("/api/subscribe-medication-reminder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, time_zone: timeZone }),
+        body: JSON.stringify({ email, time_zone: timeZone, remind_hour, remind_minute }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -137,27 +141,31 @@ export default function Profile() {
         </div>
 
         <div className="card">
-          <h3>8am medication reminder</h3>
+          <h3>Daily medication reminder</h3>
           <p style={{ marginBottom: "0.75rem" }}>
-            Get a daily email at 8am in your timezone to take your medication.
+            Get a daily email at your chosen time to take your medication.
           </p>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.5rem",
-              alignItems: "center",
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <input
               type="email"
               value={reminderEmail}
               onChange={(e) => setReminderEmail(e.target.value)}
               placeholder="your@email.com"
             />
-            <button type="button" onClick={handleSubscribeReminder}>
-              Subscribe
-            </button>
+            <div className="reminder-time-row">
+              <label className="reminder-time-label">Remind me at</label>
+              <input
+                type="time"
+                value={reminderTime}
+                onChange={(e) => setReminderTime(e.target.value)}
+                className="reminder-time-input"
+              />
+            </div>
+            <div>
+              <button type="button" onClick={handleSubscribeReminder}>
+                Set reminder
+              </button>
+            </div>
           </div>
           {reminderStatus && (
             <p

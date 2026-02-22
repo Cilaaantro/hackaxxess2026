@@ -49,6 +49,8 @@ class ChatMessage(BaseModel):
 
 class ChatBody(BaseModel):
     messages: list[ChatMessage]
+    mode: str = "general"  # "general" | "checkin"
+    user_context: dict = {}  # biomarkers + backgroundInfo injected by the frontend
 
 
 class SendEmailBody(BaseModel):
@@ -65,6 +67,8 @@ class CreateAppointmentBody(BaseModel):
 class MedicationReminderSubscribeBody(BaseModel):
     email: str
     time_zone: str = "America/New_York"
+    remind_hour: int = 8    # 0-23 local time
+    remind_minute: int = 0  # 0-59
 
 
 # Medication reminder: subscriber list and "sent today" tracking (backend dir)
@@ -130,7 +134,7 @@ def _send_medication_reminder_email(to_email: str) -> None:
 
 
 def _run_medication_reminders() -> None:
-    """For each subscriber, if it's 8am in their timezone and we haven't sent today, send reminder."""
+    """For each subscriber, check if it's their custom reminder time and send if not yet sent today."""
     load_dotenv(_load_env_path)
     if not (os.getenv("RESEND_API_KEY") or "").strip():
         return
@@ -142,12 +146,14 @@ def _run_medication_reminders() -> None:
     for sub in subscribers:
         email = (sub.get("email") or "").strip()
         tz_name = (sub.get("time_zone") or "America/New_York").strip()
+        remind_hour = int(sub.get("remind_hour", 8))
+        remind_minute = int(sub.get("remind_minute", 0))
         if not email:
             continue
         try:
             tz = ZoneInfo(tz_name)
             local = now_utc.astimezone(tz)
-            if local.hour != 23 or local.minute != 0:
+            if local.hour != remind_hour or local.minute != remind_minute:
                 continue
             if sent.get(email) == today:
                 continue
@@ -219,7 +225,7 @@ def chat_endpoint(body: ChatBody):
         raise HTTPException(status_code=400, detail="messages cannot be empty")
     try:
         msg_list = [{"role": m.role, "content": m.content} for m in body.messages]
-        reply = chatbot_chat(msg_list)
+        reply = chatbot_chat(msg_list, mode=body.mode, user_context=body.user_context or {})
         return {"message": reply}
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -273,17 +279,28 @@ def send_welcome_email(body: SendEmailBody):
 
 @app.post("/subscribe-medication-reminder")
 def subscribe_medication_reminder(body: MedicationReminderSubscribeBody):
-    """Subscribe to daily 8am email reminder to take medication. Uses your timezone so 8am is local."""
+    """Subscribe to a daily medication reminder at a custom local time."""
     email = (body.email or "").strip()
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
     tz = (body.time_zone or "America/New_York").strip()
+    remind_hour = max(0, min(23, int(body.remind_hour)))
+    remind_minute = max(0, min(59, int(body.remind_minute)))
+    # Format display time e.g. "8:05 AM"
+    display_hour = remind_hour % 12 or 12
+    ampm = "AM" if remind_hour < 12 else "PM"
+    display_time = f"{display_hour}:{remind_minute:02d} {ampm}"
     subscribers = _load_medication_subscribers()
-    if any((s.get("email") or "").strip().lower() == email.lower() for s in subscribers):
-        return {"message": "You're already subscribed. You'll get a reminder at 8am daily in your timezone."}
-    subscribers.append({"email": email, "time_zone": tz})
+    # Update if already subscribed, otherwise append
+    existing = next((s for s in subscribers if (s.get("email") or "").strip().lower() == email.lower()), None)
+    if existing:
+        existing["time_zone"] = tz
+        existing["remind_hour"] = remind_hour
+        existing["remind_minute"] = remind_minute
+    else:
+        subscribers.append({"email": email, "time_zone": tz, "remind_hour": remind_hour, "remind_minute": remind_minute})
     _save_medication_subscribers(subscribers)
-    return {"message": "Subscribed! You'll get a daily reminder at 8am in your timezone."}
+    return {"message": f"Reminder set for {display_time} daily in your timezone."}
 
 
 @app.post("/unsubscribe-medication-reminder")
