@@ -1,0 +1,96 @@
+/* BackgroundInfo.css */
+
+.background-info {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: Arial, sans-serif;
+}
+
+.background-info-back {
+  display: inline-block;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: none;
+}
+
+.background-info-back:hover {
+  text-decoration: underline;
+}
+
+.background-info-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.background-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+}
+
+.background-info-table th,
+.background-info-table td {
+  border: 1px solid #444;
+  padding: 0.5rem 1rem;
+  text-align: center;
+}
+
+.background-info-table th {
+  background-color: #1a1a1a;
+  color: #fff;
+}
+
+.background-info-table td {
+  background-color: #222;
+  color: #fff;
+}
+
+.background-info-submit {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  background: #646cff;
+  color: white;
+  align-self: flex-start;
+}
+
+.background-info-submit:hover:not(:disabled) {
+  background: #535bf2;
+}
+
+.background-info-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.background-info-message {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+}
+
+.background-info-message.success {
+  color: #27ae60;
+}
+
+.background-info-message.error {
+  color: #e74c3c;
+}
+
+@media (prefers-color-scheme: light) {
+  .background-info-table th,
+  .background-info-table td {
+    background-color: #f5f5f5;
+    color: #213547;
+    border-color: #ddd;
+  }
+
+  .background-info-back {
+    color: #646cff;
+  }
+}
