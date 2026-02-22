@@ -831,6 +831,146 @@ input:focus, textarea:focus {
   font-weight: 500;
 }
 
+/* ── Prediction card (Symptoms) ───────────────────────────────────────────── */
+.prediction-card {
+  border-left: 3px solid var(--warm-border);
+  transition: border-color var(--warm-transition), background var(--warm-transition);
+}
+.prediction-card--ready {
+  border-left-color: var(--warm-primary);
+  background: var(--warm-primary-light);
+}
+.prediction-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+.prediction-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.prediction-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+}
+.prediction-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+.prediction-disease-label,
+.prediction-rec-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warm-text-subtle);
+}
+.prediction-rec-label { margin-top: 1rem; }
+.prediction-disease {
+  font-family: var(--font-serif);
+  font-size: 1.625rem;
+  font-weight: 500;
+  color: var(--warm-primary);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-transform: capitalize;
+  margin-top: 0.2rem;
+}
+.prediction-rec {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--warm-text);
+  margin: 0.4rem 0 0;
+  padding: 1rem 1.125rem;
+  background: var(--warm-surface);
+  border: 1px solid var(--warm-border);
+  border-radius: var(--warm-radius);
+}
+.prediction-disclaimer {
+  font-size: 0.8rem;
+  color: var(--warm-text-subtle);
+  line-height: 1.6;
+  margin: 0.75rem 0 0;
+  font-style: italic;
+}
+
+/* ── Doctor email status card ─────────────────────────────────────────────── */
+.doctor-email-status {
+  transition: border-color var(--warm-transition), background var(--warm-transition);
+}
+.doctor-email-status--sent {
+  border-left: 3px solid var(--warm-primary);
+  background: var(--warm-primary-light);
+}
+.doctor-email-status--err {
+  border-left: 3px solid #f87171;
+  background: #fef2f2;
+}
+.doctor-email-status-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+.doctor-email-status-icon {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.doctor-email-status--sent .doctor-email-status-icon {
+  background: var(--warm-primary);
+  color: #fff;
+}
+.doctor-email-status--err .doctor-email-status-icon {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* ── JSON collapsible (Symptoms) ─────────────────────────────────────────── */
+.json-details {
+  border: 1px solid var(--warm-border-soft);
+  border-radius: var(--warm-radius);
+  overflow: hidden;
+}
+.json-details-summary {
+  padding: 0.75rem 1.125rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--warm-text-muted);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--warm-surface-card);
+  user-select: none;
+  transition: background var(--warm-transition), color var(--warm-transition);
+}
+.json-details-summary::-webkit-details-marker { display: none; }
+.json-details-summary::before {
+  content: "▶";
+  font-size: 0.6rem;
+  transition: transform var(--warm-transition);
+  color: var(--warm-accent);
+}
+details[open] .json-details-summary::before { transform: rotate(90deg); }
+.json-details-summary:hover {
+  background: var(--warm-primary-light);
+  color: var(--warm-accent);
+}
+.json-details > div {
+  padding: 0 1.125rem 1rem;
+  background: var(--warm-surface-card);
+}
+
 /* ── Condition grid (BackgroundInfo) ──────────────────────────────────────── */
 .condition-grid {
   display: grid;
