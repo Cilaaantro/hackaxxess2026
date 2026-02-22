@@ -33,7 +33,13 @@ from cal_com import create_booking as cal_create_booking, get_available_slots as
 from sicknessPredictor import predict_disease
 
 import firebase_admin
-from firebase_admin import credentials, auth
+from firebase_admin import credentials, auth, firestore
+
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
 
 app = FastAPI(title="Hack Axxess 2026 API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -70,6 +76,11 @@ class MedicationReminderSubscribeBody(BaseModel):
     time_zone: str = "America/New_York"
     remind_hour: int = 8    # 0-23 local time
     remind_minute: int = 0  # 0-59
+
+class DoctorInfoBody(BaseModel):
+    name: str
+    email: str
+    specialty: str
 
 
 # Medication reminder: subscriber list and "sent today" tracking (backend dir)
@@ -166,10 +177,10 @@ def _run_medication_reminders() -> None:
     if changed:
         _save_medication_sent_today(sent)
 
+###
 
 # Initialize Firebase Admin
-cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
+
 
 # CORS for frontend (Vite default port 5173)
 app.add_middleware(
@@ -233,11 +244,27 @@ def chat_endpoint(body: ChatBody):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Chat failed: {e!s}")
 
+        
+
+
+
+
 
 FIREBASE_SEND_EMAIL_URL = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode"
 
 
 RESEND_EMAILS_URL = "https://api.resend.com/emails"
+
+@app.get("/get-doctor-info")
+def get_doctor_info(user=Depends(verify_token)):
+    uid = user["uid"]
+    doc = db.collection("users").document(uid).get()
+
+    if not doc.exists:
+        return {"doctor": None}
+
+    data = doc.to_dict()
+    return {"doctor": data.get("doctor")}
 
 
 def _send_welcome_email(to_email: str) -> None:
@@ -398,6 +425,26 @@ def create_appointment(body: CreateAppointmentBody):
             except Exception:
                 pass
         raise HTTPException(status_code=502, detail=f"Cal.com booking failed: {msg}")
+
+@app.post("/save-doctor-info")
+def save_doctor_info(
+    body: DoctorInfoBody,
+    user=Depends(verify_token)
+):
+    uid = user["uid"]
+
+    doc_ref = db.collection("users").document(uid)
+
+    doc_ref.set({
+        "doctor": {
+            "name": body.name,
+            "email": body.email,
+            "specialty": body.specialty
+        },
+        "updatedAt": datetime.utcnow()
+    }, merge=True)
+
+    return {"message": "Doctor information saved successfully"}
 
 
 @app.post("/send-password-reset-email")

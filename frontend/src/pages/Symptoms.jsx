@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { auth } from "../firebase";
+import { auth, firestore } from "../firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { SYMPTOM_KEYS_ORDER, symptomLabel } from "../symptomKeys";
 
 export default function Symptoms() {
@@ -54,6 +55,17 @@ export default function Symptoms() {
     setPrediction(null);
     setPredError(null);
     setPredicting(true);
+
+    // Save selected symptoms as an array to users/{uid}
+    if (user) {
+      const symptomsArray = SYMPTOM_KEYS_ORDER.filter((k) => selected.has(k));
+      setDoc(
+        doc(firestore, "users", user.uid),
+        { symptoms: symptomsArray, symptoms_updated_at: serverTimestamp() },
+        { merge: true }
+      ).catch((err) => console.warn("Could not save symptoms to Firestore:", err));
+    }
+
     try {
       const res = await fetch("/api/predict-and-recommend", {
         method: "POST",
